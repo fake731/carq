@@ -14,7 +14,302 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      car_updates: {
+        Row: {
+          car_id: string
+          created_at: string
+          id: string
+          images: string[] | null
+          message: string
+          status: string
+        }
+        Insert: {
+          car_id: string
+          created_at?: string
+          id?: string
+          images?: string[] | null
+          message: string
+          status: string
+        }
+        Update: {
+          car_id?: string
+          created_at?: string
+          id?: string
+          images?: string[] | null
+          message?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "car_updates_car_id_fkey"
+            columns: ["car_id"]
+            isOneToOne: false
+            referencedRelation: "cars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cars: {
+        Row: {
+          color: string | null
+          created_at: string
+          estimated_cost: number | null
+          estimated_time: string | null
+          garage_id: string | null
+          id: string
+          images: string[] | null
+          make: string
+          model: string
+          notes: string | null
+          owner_id: string | null
+          owner_name: string
+          owner_phone: string
+          plate_number: string
+          status: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          estimated_cost?: number | null
+          estimated_time?: string | null
+          garage_id?: string | null
+          id?: string
+          images?: string[] | null
+          make: string
+          model: string
+          notes?: string | null
+          owner_id?: string | null
+          owner_name: string
+          owner_phone: string
+          plate_number: string
+          status?: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          estimated_cost?: number | null
+          estimated_time?: string | null
+          garage_id?: string | null
+          id?: string
+          images?: string[] | null
+          make?: string
+          model?: string
+          notes?: string | null
+          owner_id?: string | null
+          owner_name?: string
+          owner_phone?: string
+          plate_number?: string
+          status?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cars_garage_id_fkey"
+            columns: ["garage_id"]
+            isOneToOne: false
+            referencedRelation: "garages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cars_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      garages: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          is_premium: boolean | null
+          name: string
+          owner_id: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id: string
+          is_premium?: boolean | null
+          name: string
+          owner_id?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_premium?: boolean | null
+          name?: string
+          owner_id?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "garages_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          car_id: string | null
+          content: string
+          created_at: string
+          id: string
+          images: string[] | null
+          read: boolean | null
+          receiver_id: string | null
+          sender_id: string | null
+        }
+        Insert: {
+          car_id?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          images?: string[] | null
+          read?: boolean | null
+          receiver_id?: string | null
+          sender_id?: string | null
+        }
+        Update: {
+          car_id?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          images?: string[] | null
+          read?: boolean | null
+          receiver_id?: string | null
+          sender_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_car_id_fkey"
+            columns: ["car_id"]
+            isOneToOne: false
+            referencedRelation: "cars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          read: boolean | null
+          recipient_id: string | null
+          sender_id: string | null
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          read?: boolean | null
+          recipient_id?: string | null
+          sender_id?: string | null
+          title: string
+          type?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          read?: boolean | null
+          recipient_id?: string | null
+          sender_id?: string | null
+          title?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string
+          garage_id: string | null
+          garage_name: string | null
+          id: string
+          is_premium: boolean | null
+          password: string
+          phone: string
+          role: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          garage_id?: string | null
+          garage_name?: string | null
+          id?: string
+          is_premium?: boolean | null
+          password: string
+          phone: string
+          role?: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          garage_id?: string | null
+          garage_name?: string | null
+          id?: string
+          is_premium?: boolean | null
+          password?: string
+          phone?: string
+          role?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

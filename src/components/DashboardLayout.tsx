@@ -1,8 +1,8 @@
-import { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useNavigate } from "react-router-dom";
-import { Bell, LogOut, Wrench, User, Settings, Car, LayoutDashboard } from "lucide-react";
-import { mockNotifications } from "@/lib/mock-data";
+import { supabase } from "@/integrations/supabase/client";
+import { Bell, LogOut, Wrench, User, Car } from "lucide-react";
 
 interface Props {
   children: ReactNode;
@@ -12,7 +12,22 @@ interface Props {
 const DashboardLayout = ({ children, title }: Props) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const unreadCount = mockNotifications.filter((n) => !n.read).length;
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const loadUnread = async () => {
+      const { count } = await supabase
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("recipient_id", user.id)
+        .eq("read", false);
+      setUnreadCount(count || 0);
+    };
+    loadUnread();
+    const interval = setInterval(loadUnread, 15000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const handleLogout = () => {
     logout();
@@ -20,10 +35,11 @@ const DashboardLayout = ({ children, title }: Props) => {
   };
 
   const roleLabel = user?.role === "admin" ? "المطور" : user?.role === "garage" ? "كراج" : "عميل";
+  const roleIcon = user?.role === "garage" ? Car : user?.role === "admin" ? Wrench : User;
+  const RoleIcon = roleIcon;
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Top Nav */}
       <header className="sticky top-0 z-50 glass-strong border-b border-border/50">
         <div className="container flex items-center justify-between h-16 px-4">
           <div className="flex items-center gap-3">
@@ -37,7 +53,6 @@ const DashboardLayout = ({ children, title }: Props) => {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Notifications */}
             <button className="relative w-9 h-9 rounded-lg bg-surface-2 border border-border flex items-center justify-center hover:border-primary/30 transition-colors">
               <Bell className="w-4 h-4 text-muted-foreground" />
               {unreadCount > 0 && (
@@ -47,24 +62,18 @@ const DashboardLayout = ({ children, title }: Props) => {
               )}
             </button>
 
-            {/* User info */}
             <div className="hidden sm:flex items-center gap-2 bg-surface-2 border border-border rounded-lg px-3 py-1.5">
-              <User className="w-4 h-4 text-primary" />
-              <span className="text-sm text-foreground">{user?.fullName}</span>
+              <RoleIcon className="w-4 h-4 text-primary" />
+              <span className="text-sm text-foreground">{user?.full_name}</span>
             </div>
 
-            {/* Logout */}
-            <button
-              onClick={handleLogout}
-              className="w-9 h-9 rounded-lg bg-surface-2 border border-border flex items-center justify-center hover:border-destructive/30 hover:text-destructive transition-colors text-muted-foreground"
-            >
+            <button onClick={handleLogout} className="w-9 h-9 rounded-lg bg-surface-2 border border-border flex items-center justify-center hover:border-destructive/30 hover:text-destructive transition-colors text-muted-foreground">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main */}
       <main className="container px-4 py-6">
         {children}
       </main>

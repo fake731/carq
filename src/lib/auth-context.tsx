@@ -1,59 +1,76 @@
-import { createContext, useContext, useState, ReactNode } from "react";
-import { User, UserRole, mockUsers } from "./mock-data";
+import { createContext, useContext, useState, ReactNode, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
+
+export type Profile = Tables<"profiles">;
 
 interface AuthContextType {
-  user: User | null;
-  login: (username: string, password: string) => boolean;
-  register: (fullName: string, phone: string) => { username: string; password: string } | null;
+  user: Profile | null;
+  login: (username: string, password: string) => Promise<boolean>;
+  register: (fullName: string, phone: string) => Promise<{ username: string; password: string } | null>;
   logout: () => void;
   isAuthenticated: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const login = (username: string, password: string): boolean => {
-    // Admin login
-    if (username === "bmw555" && password === "123456789") {
-      setUser({
-        id: "admin",
-        fullName: "المطور",
-        phone: "00000000",
-        username: "bmw555",
-        role: "admin",
-      });
-      return true;
+  useEffect(() => {
+    // Check localStorage for saved session
+    const saved = localStorage.getItem("smart_garage_user");
+    if (saved) {
+      try {
+        setUser(JSON.parse(saved));
+      } catch {}
     }
+    setLoading(false);
+  }, []);
 
-    // Mock login - find user by username
-    const found = mockUsers.find((u) => u.username === username);
-    if (found) {
-      setUser(found);
+  const login = async (username: string, password: string): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("username", username)
+      .eq("password", password)
+      .maybeSingle();
+
+    if (data && !error) {
+      setUser(data);
+      localStorage.setItem("smart_garage_user", JSON.stringify(data));
       return true;
     }
     return false;
   };
 
-  const register = (fullName: string, phone: string) => {
+  const register = async (fullName: string, phone: string) => {
     const username = fullName.split(" ")[0].toLowerCase() + "_" + Math.floor(Math.random() * 1000);
     const password = Math.random().toString(36).slice(-8);
-    const newUser: User = {
-      id: "new_" + Date.now(),
-      fullName,
-      phone,
-      username,
-      role: "customer",
-    };
-    setUser(newUser);
-    return { username, password };
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .insert({ username, password, full_name: fullName, phone, role: "customer" })
+      .select()
+      .single();
+
+    if (data && !error) {
+      setUser(data);
+      localStorage.setItem("smart_garage_user", JSON.stringify(data));
+      return { username, password };
+    }
+    return null;
   };
 
-  const logout = () => setUser(null);
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem("smart_garage_user");
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isAuthenticated: !!user, loading }}>
       {children}
     </AuthContext.Provider>
   );

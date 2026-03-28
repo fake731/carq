@@ -57,10 +57,10 @@ const AuthPage = () => {
     setIsLoading(true);
     try {
       const result = await register(fullName, phone);
-      if (result.success) {
+      if (result.success && 'username' in result) {
         setCredentials({ username: result.username, password: result.password });
         setPendingApproval(true);
-      } else {
+      } else if (!result.success && 'error' in result) {
         setError(result.error);
       }
     } finally {

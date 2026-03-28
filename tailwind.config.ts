@@ -7,14 +7,14 @@ export default {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
+      padding: "1.5rem",
       screens: {
         "2xl": "1400px",
       },
     },
     extend: {
       fontFamily: {
-        tajawal: ["Tajawal", "sans-serif"],
+        ip1: ["ip1", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

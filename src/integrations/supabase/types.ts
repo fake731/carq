@@ -270,6 +270,8 @@ export type Database = {
       }
       profiles: {
         Row: {
+          approved: boolean
+          avatar_url: string | null
           created_at: string
           full_name: string
           garage_id: string | null
@@ -283,6 +285,8 @@ export type Database = {
           username: string
         }
         Insert: {
+          approved?: boolean
+          avatar_url?: string | null
           created_at?: string
           full_name: string
           garage_id?: string | null
@@ -296,6 +300,8 @@ export type Database = {
           username: string
         }
         Update: {
+          approved?: boolean
+          avatar_url?: string | null
           created_at?: string
           full_name?: string
           garage_id?: string | null

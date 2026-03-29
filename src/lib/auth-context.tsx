@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone, phonesMatch } from "./phone-utils";
+import { arabicNamesMatch, getMatchScore, normalizeArabic } from "./arabic-utils";
 
 export interface Profile {
   id: string;
@@ -42,7 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const parsed = JSON.parse(saved);
         setUser(parsed);
-        // Refresh from DB
         supabase.from("profiles").select("*").eq("id", parsed.id).maybeSingle().then(({ data }) => {
           if (data) {
             setUser(data as Profile);
@@ -64,69 +64,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (identifier: string, password: string) => {
-    const normalizedPassword = normalizePhone(password);
-    
-    // Try exact username match first
-    const { data: exactMatch } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("username", identifier.trim())
-      .maybeSingle();
-    
+    // Get all profiles for smart matching
+    const { data: allProfiles } = await supabase.from("profiles").select("*");
+    if (!allProfiles || allProfiles.length === 0) {
+      return { success: false, error: "لا توجد حسابات مسجلة" };
+    }
+
+    // 1. Exact username match
+    const exactMatch = allProfiles.find(p => 
+      normalizeArabic(p.username) === normalizeArabic(identifier.trim()) ||
+      normalizeArabic(p.full_name) === normalizeArabic(identifier.trim())
+    );
+
     if (exactMatch) {
       if (phonesMatch(exactMatch.password, password)) {
-        if (!exactMatch.approved) {
-          return { success: false, error: "حسابك قيد المراجعة من قبل الإدارة" };
-        }
+        if (!exactMatch.approved) return { success: false, error: "حسابك قيد المراجعة من قبل الإدارة" };
         setUser(exactMatch as Profile);
         localStorage.setItem("smart_garage_user", JSON.stringify(exactMatch));
         return { success: true };
       }
+      return { success: false, error: "كلمة المرور غير صحيحة" };
     }
 
-    // Try matching by full_name exact
-    const { data: nameMatch } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("full_name", identifier.trim())
-      .maybeSingle();
-
-    if (nameMatch) {
-      if (phonesMatch(nameMatch.password, password)) {
-        if (!nameMatch.approved) {
-          return { success: false, error: "حسابك قيد المراجعة من قبل الإدارة" };
-        }
-        setUser(nameMatch as Profile);
-        localStorage.setItem("smart_garage_user", JSON.stringify(nameMatch));
+    // 2. Smart Arabic name matching - match first 2 names or first name + partial
+    const smartMatches = allProfiles.filter(p => arabicNamesMatch(identifier.trim(), p.full_name));
+    
+    if (smartMatches.length > 0) {
+      // Sort by match score
+      smartMatches.sort((a, b) => getMatchScore(identifier, b.full_name) - getMatchScore(identifier, a.full_name));
+      
+      // Check password for matches
+      const passwordMatches = smartMatches.filter(p => phonesMatch(p.password, password));
+      
+      if (passwordMatches.length === 1) {
+        if (!passwordMatches[0].approved) return { success: false, error: "حسابك قيد المراجعة من قبل الإدارة" };
+        // Auto-login with the matched profile
+        setUser(passwordMatches[0] as Profile);
+        localStorage.setItem("smart_garage_user", JSON.stringify(passwordMatches[0]));
         return { success: true };
       }
-    }
-
-    // Fuzzy: match by first name and show suggestions
-    const firstName = identifier.trim().split(" ")[0];
-    if (firstName.length >= 2) {
-      const { data: fuzzy } = await supabase
-        .from("profiles")
-        .select("*")
-        .ilike("full_name", `${firstName}%`);
       
-      if (fuzzy && fuzzy.length > 0) {
-        // Check if any match the password
-        const passwordMatches = fuzzy.filter(p => phonesMatch(p.password, password));
-        if (passwordMatches.length === 1) {
-          if (!passwordMatches[0].approved) {
-            return { success: false, error: "حسابك قيد المراجعة من قبل الإدارة" };
-          }
-          setUser(passwordMatches[0] as Profile);
-          localStorage.setItem("smart_garage_user", JSON.stringify(passwordMatches[0]));
-          return { success: true };
-        }
-        if (passwordMatches.length > 1) {
-          return { success: false, suggestions: passwordMatches as Profile[] };
-        }
-        // No password match but names found
-        return { success: false, suggestions: fuzzy as Profile[], error: "كلمة المرور غير صحيحة" };
+      if (passwordMatches.length > 1) {
+        return { success: false, suggestions: passwordMatches as Profile[] };
       }
+      
+      // Password doesn't match but names found - show suggestions
+      return { success: false, suggestions: smartMatches.slice(0, 5) as Profile[], error: "كلمة المرور غير صحيحة" };
     }
 
     return { success: false, error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
@@ -140,56 +123,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (fullName: string, phone: string) => {
     const normalizedPhone = normalizePhone(phone);
     
-    // Check if phone already exists
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("*")
-      .order("created_at", { ascending: false });
-
+    const { data: existing } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
     const phoneExists = (existing || []).find(p => phonesMatch(p.phone, phone));
-    if (phoneExists) {
-      return { success: false as const, error: "رقم الهاتف مسجل مسبقاً" };
-    }
+    if (phoneExists) return { success: false as const, error: "رقم الهاتف مسجل مسبقاً" };
 
     const username = fullName.trim();
     const password = normalizedPhone;
 
     const { data, error } = await supabase
       .from("profiles")
-      .insert({
-        username,
-        password,
-        full_name: fullName.trim(),
-        phone: normalizedPhone,
-        role: "customer",
-        approved: false, // Needs admin approval
-      })
+      .insert({ username, password, full_name: fullName.trim(), phone: normalizedPhone, role: "customer", approved: false })
       .select()
       .single();
 
     if (data && !error) {
-      // Don't set as user yet - needs approval
       return { success: true as const, username, password: normalizedPhone };
     }
     return { success: false as const, error: "حدث خطأ أثناء التسجيل" };
   };
 
   const recoverAccount = async (identifier: string): Promise<Profile | null> => {
-    // Try phone
     const { data: all } = await supabase.from("profiles").select("*");
     if (!all) return null;
     
     const byPhone = all.find(p => phonesMatch(p.phone, identifier));
     if (byPhone) return byPhone as Profile;
     
-    // Try name
-    const byName = all.find(p => p.full_name === identifier.trim() || p.username === identifier.trim());
-    if (byName) return byName as Profile;
+    // Smart Arabic name match
+    const nameMatches = all.filter(p => arabicNamesMatch(identifier.trim(), p.full_name));
+    if (nameMatches.length > 0) {
+      nameMatches.sort((a, b) => getMatchScore(identifier, b.full_name) - getMatchScore(identifier, a.full_name));
+      return nameMatches[0] as Profile;
+    }
 
-    // Fuzzy first name
-    const firstName = identifier.trim().split(" ")[0];
-    const fuzzy = all.find(p => p.full_name.startsWith(firstName));
-    return fuzzy ? (fuzzy as Profile) : null;
+    const byUsername = all.find(p => p.username === identifier.trim());
+    if (byUsername) return byUsername as Profile;
+
+    return null;
   };
 
   const logout = () => {

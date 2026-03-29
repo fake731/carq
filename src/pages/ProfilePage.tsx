@@ -3,13 +3,15 @@ import { useAuth } from "@/lib/auth-context";
 import { Navigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Download, Save, Loader2, Camera } from "lucide-react";
+import { User, Download, Save, Loader2, Camera, Key } from "lucide-react";
 import { toast } from "sonner";
+import { normalizePhone } from "@/lib/phone-utils";
 
 const ProfilePage = () => {
   const { user, isAuthenticated, loading, refreshUser } = useAuth();
   const [fullName, setFullName] = useState(user?.full_name || "");
   const [phone, setPhone] = useState(user?.phone || "");
+  const [newPassword, setNewPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -18,14 +20,23 @@ const ProfilePage = () => {
 
   const handleSave = async () => {
     setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ full_name: fullName.trim(), phone: phone.trim(), username: fullName.trim() })
-      .eq("id", user.id);
+    const updateData: any = {
+      full_name: fullName.trim(),
+      phone: phone.trim(),
+      username: fullName.trim(),
+    };
+    
+    // If admin changing password
+    if (newPassword.trim()) {
+      updateData.password = normalizePhone(newPassword);
+      updateData.phone = normalizePhone(newPassword);
+    }
 
+    const { error } = await supabase.from("profiles").update(updateData).eq("id", user.id);
     if (!error) {
       await refreshUser();
       toast.success("تم حفظ التعديلات");
+      setNewPassword("");
     } else {
       toast.error("حدث خطأ");
     }
@@ -50,18 +61,21 @@ const ProfilePage = () => {
     const content = `
 ═══════════════════════════════════════
        الكراج الذكي - بيانات الدخول
+       Smart Garage - Login Credentials
 ═══════════════════════════════════════
 
-  اسم المستخدم: ${user.full_name}
-  كلمة المرور: ${user.phone}
+  اسم المستخدم (Username): ${user.full_name}
+  كلمة المرور (Password): ${user.phone}
 
+═══════════════════════════════════════
+  ⚠️ احتفظ بهذا الملف في مكان آمن
 ═══════════════════════════════════════
 `;
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `smart-garage-credentials.txt`;
+    a.download = `smart-garage-credentials-${user.full_name.replace(/\s/g, "_")}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -94,12 +108,24 @@ const ProfilePage = () => {
         <div className="ios-card p-6 space-y-4">
           <h3 className="font-bold text-foreground">تعديل البيانات</h3>
           <div>
-            <label className="block text-sm text-muted-foreground mb-2">الاسم الرباعي</label>
+            <label className="block text-sm text-muted-foreground mb-2">الاسم الرباعي (اليوزر نيم)</label>
             <input value={fullName} onChange={e => setFullName(e.target.value)} className="ios-input" />
           </div>
           <div>
             <label className="block text-sm text-muted-foreground mb-2">رقم الهاتف</label>
             <input value={phone} onChange={e => setPhone(e.target.value)} className="ios-input" dir="ltr" />
+          </div>
+          <div>
+            <label className="block text-sm text-muted-foreground mb-2 flex items-center gap-1">
+              <Key className="w-3 h-3" /> تغيير كلمة المرور (رقم هاتف جديد)
+            </label>
+            <input 
+              value={newPassword} 
+              onChange={e => setNewPassword(e.target.value)} 
+              className="ios-input" 
+              dir="ltr" 
+              placeholder="اتركه فارغاً إذا لا تريد التغيير"
+            />
           </div>
           <button onClick={handleSave} disabled={saving} className="ios-btn-primary flex items-center justify-center gap-2">
             {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> حفظ التعديلات</>}

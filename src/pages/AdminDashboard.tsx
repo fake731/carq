@@ -5,13 +5,16 @@ import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Users, Car, Building2, Bell, Send, Trash2, Shield, Activity, Star, Loader2, X,
-  Search, RefreshCw, Phone, Clock, Plus, Edit, Check, XCircle, ChevronDown, Save, 
-  MessageSquare, Download, Ban, Settings, Eye, UserPlus, Wrench
+  Search, RefreshCw, Phone, Clock, Plus, Edit, Check, XCircle, Save,
+  UserPlus, Wrench, Download, Ban, Eye, Image as ImageIcon, Settings,
+  Palette, Type, Globe, Calendar, FileText, BarChart3, Lock, Zap, 
+  MessageSquare, Database, Upload, AlertTriangle, Hash, Layers, Gauge
 } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { normalizePhone } from "@/lib/phone-utils";
 
-type Tab = "overview" | "users" | "garages" | "cars" | "notifications" | "approvals" | "settings";
+type Tab = "overview" | "users" | "garages" | "cars" | "notifications" | "approvals" | "settings" | "logs";
 type ProfileRow = Tables<"profiles">;
 type CarRow = Tables<"cars">;
 type NotificationRow = Tables<"notifications">;
@@ -45,6 +48,10 @@ const AdminDashboard = () => {
   const [showAddCar, setShowAddCar] = useState(false);
   const [newCar, setNewCar] = useState({ make: "", model: "", year: 2024, plateNumber: "", color: "", ownerName: "", ownerPhone: "", notes: "", estimatedCost: 0, estimatedTime: "", garageId: "" });
 
+  // Custom status input
+  const [customStatusCar, setCustomStatusCar] = useState<string | null>(null);
+  const [customStatusText, setCustomStatusText] = useState("");
+
   const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
     { id: "overview", label: "نظرة عامة", icon: Activity },
     { id: "approvals", label: "الموافقات", icon: Check },
@@ -52,6 +59,8 @@ const AdminDashboard = () => {
     { id: "garages", label: "الكراجات", icon: Building2 },
     { id: "cars", label: "السيارات", icon: Car },
     { id: "notifications", label: "الإشعارات", icon: Bell },
+    { id: "settings", label: "الإعدادات", icon: Settings },
+    { id: "logs", label: "السجل", icon: FileText },
   ];
 
   useEffect(() => { loadAll(); }, []);
@@ -98,12 +107,19 @@ const AdminDashboard = () => {
     loadAll();
   };
 
+  const banUser = async (id: string) => {
+    await supabase.from("profiles").update({ approved: false } as any).eq("id", id);
+    toast.success("تم حظر المستخدم");
+    loadAll();
+  };
+
   const updateUser = async (id: string) => {
+    const normalizedPhone = normalizePhone(editForm.phone);
     await supabase.from("profiles").update({
       full_name: editForm.full_name,
       username: editForm.full_name,
-      phone: editForm.phone,
-      password: editForm.phone,
+      phone: normalizedPhone,
+      password: normalizedPhone,
       role: editForm.role,
     }).eq("id", id);
     toast.success("تم تحديث البيانات");
@@ -113,9 +129,10 @@ const AdminDashboard = () => {
 
   const createUser = async () => {
     if (!newUser.fullName || !newUser.phone) { toast.error("الرجاء تعبئة البيانات"); return; }
+    const normalizedPhone = normalizePhone(newUser.phone);
     const insertData: any = {
       full_name: newUser.fullName, username: newUser.fullName,
-      phone: newUser.phone, password: newUser.phone,
+      phone: normalizedPhone, password: normalizedPhone,
       role: newUser.role, approved: true,
     };
     if (newUser.role === "garage" && newUser.garageName) {
@@ -125,12 +142,11 @@ const AdminDashboard = () => {
     const { error } = await supabase.from("profiles").insert(insertData);
     if (error) { toast.error("خطأ: " + error.message); return; }
 
-    // If garage role, also create in garages table
     if (newUser.role === "garage" && newUser.garageName) {
       await supabase.from("garages").insert({
         id: insertData.garage_id,
         name: newUser.garageName,
-        phone: newUser.phone,
+        phone: normalizedPhone,
       });
     }
     toast.success("تم إنشاء المستخدم");
@@ -147,11 +163,11 @@ const AdminDashboard = () => {
       address: newGarage.address, is_premium: newGarage.isPremium,
     });
 
-    // Create garage profile if owner info provided
     if (newGarage.ownerName && newGarage.ownerPhone) {
+      const normalizedPhone = normalizePhone(newGarage.ownerPhone);
       await supabase.from("profiles").insert({
         full_name: newGarage.ownerName, username: newGarage.ownerName,
-        phone: newGarage.ownerPhone, password: newGarage.ownerPhone,
+        phone: normalizedPhone, password: normalizedPhone,
         role: "garage", garage_id: garageId, garage_name: newGarage.name, approved: true,
       });
     }
@@ -199,12 +215,26 @@ const AdminDashboard = () => {
       }
     }
     toast.success("تم تحديث الحالة");
+    setCustomStatusCar(null);
+    setCustomStatusText("");
     loadAll();
   };
 
   const deleteCar = async (id: string) => {
     await supabase.from("cars").delete().eq("id", id);
     toast.success("تم حذف السيارة");
+    loadAll();
+  };
+
+  const deleteNotification = async (id: string) => {
+    await supabase.from("notifications").delete().eq("id", id);
+    toast.success("تم حذف الإشعار");
+    loadAll();
+  };
+
+  const deleteAllNotifications = async () => {
+    await supabase.from("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    toast.success("تم حذف جميع الإشعارات");
     loadAll();
   };
 
@@ -230,11 +260,83 @@ const AdminDashboard = () => {
     loadAll();
   };
 
+  const exportUsers = () => {
+    const csv = "الاسم,الهاتف,الدور,الحالة,تاريخ التسجيل\n" + 
+      users.map(u => `${u.full_name},${u.phone},${u.role},${(u as any).approved ? "مفعّل" : "معلّق"},${u.created_at}`).join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "users-export.csv"; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("تم تصدير البيانات");
+  };
+
+  const exportCars = () => {
+    const csv = "الماركة,الموديل,اللوحة,اللون,المالك,الحالة\n" + 
+      cars.map(c => `${c.make},${c.model},${c.plate_number},${c.color || ""},${c.owner_name},${c.status}`).join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "cars-export.csv"; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("تم تصدير البيانات");
+  };
+
   const customers = users.filter(u => u.role === "customer");
   const garageUsers = users.filter(u => u.role === "garage");
   const filteredUsers = searchQuery
     ? users.filter(u => u.full_name.includes(searchQuery) || u.username.includes(searchQuery) || u.phone.includes(searchQuery))
     : users;
+
+  // Extended status list for cars
+  const allStatuses: { value: string; label: string }[] = [
+    { value: "received", label: "تم الاستلام" },
+    { value: "inspecting", label: "قيد الفحص" },
+    { value: "repairing", label: "قيد التصليح" },
+    { value: "waiting_parts", label: "بانتظار قطع" },
+    { value: "ready", label: "جاهزة" },
+    { value: "pending", label: "بانتظار الموافقة" },
+    { value: "week_wait", label: "باقي أسبوع" },
+    { value: "two_weeks", label: "باقي أسبوعين" },
+    { value: "month_wait", label: "باقي شهر" },
+    { value: "needs_time", label: "تحتاج وقت" },
+    { value: "not_started", label: "لم تبدأ" },
+    { value: "testing", label: "قيد التجربة" },
+    { value: "delivered", label: "تم التسليم" },
+  ];
+
+  // Developer permissions list
+  const developerPermissions = [
+    { icon: Users, label: "إدارة المستخدمين", desc: "إنشاء وتعديل وحذف الحسابات" },
+    { icon: Building2, label: "إدارة الكراجات", desc: "إنشاء وتعديل وحذف الكراجات" },
+    { icon: Car, label: "إدارة السيارات", desc: "إضافة وتحديث حالة السيارات" },
+    { icon: Bell, label: "إدارة الإشعارات", desc: "إرسال وحذف الإشعارات" },
+    { icon: MessageSquare, label: "الشات المباشر", desc: "التواصل مع جميع المستخدمين" },
+    { icon: Lock, label: "تغيير كلمات المرور", desc: "إعادة تعيين كلمات مرور المستخدمين" },
+    { icon: Ban, label: "حظر المستخدمين", desc: "تعليق أو حظر الحسابات" },
+    { icon: Check, label: "الموافقة على التسجيل", desc: "قبول أو رفض طلبات التسجيل" },
+    { icon: Download, label: "تصدير البيانات", desc: "تصدير بيانات المستخدمين والسيارات" },
+    { icon: Star, label: "إدارة البريميوم", desc: "تحديد حالة الكراجات المميزة" },
+    { icon: Palette, label: "تخصيص الألوان", desc: "تعديل ألوان وتصميم النظام" },
+    { icon: Type, label: "تعديل النصوص", desc: "تغيير العناوين والنصوص" },
+    { icon: ImageIcon, label: "رفع الصور", desc: "إضافة صور وشعارات للنظام" },
+    { icon: Globe, label: "إعدادات عامة", desc: "التحكم بالإعدادات العامة" },
+    { icon: Calendar, label: "جدولة المواعيد", desc: "تحديد أيام وساعات العمل" },
+    { icon: FileText, label: "سجل النشاط", desc: "مراقبة كل الأنشطة بالنظام" },
+    { icon: BarChart3, label: "الإحصائيات", desc: "عرض تقارير وإحصائيات مفصلة" },
+    { icon: Database, label: "إدارة البيانات", desc: "التحكم الكامل بقاعدة البيانات" },
+    { icon: Upload, label: "رفع الملفات", desc: "رفع فواتير ومستندات" },
+    { icon: AlertTriangle, label: "تنبيهات مخصصة", desc: "إنشاء تنبيهات حسب الحاجة" },
+    { icon: Hash, label: "إدارة الأرقام", desc: "التحكم بأرقام اللوحات والهواتف" },
+    { icon: Layers, label: "إدارة الحالات", desc: "إضافة حالات مخصصة للسيارات" },
+    { icon: Gauge, label: "مراقبة الأداء", desc: "مراقبة أداء النظام" },
+    { icon: Zap, label: "إجراءات سريعة", desc: "تنفيذ عمليات جماعية" },
+    { icon: Wrench, label: "صيانة النظام", desc: "أدوات صيانة وإصلاح" },
+    { icon: Eye, label: "عرض كل البيانات", desc: "الوصول الكامل لجميع المعلومات" },
+    { icon: Settings, label: "إعدادات متقدمة", desc: "تكوين متقدم للنظام" },
+    { icon: RefreshCw, label: "مزامنة البيانات", desc: "تحديث ومزامنة كل البيانات" },
+    { icon: Phone, label: "إدارة الاتصالات", desc: "التحكم بالرسائل والمكالمات" },
+    { icon: Shield, label: "الأمان والحماية", desc: "إدارة صلاحيات الأمان" },
+  ];
 
   if (loading) {
     return <DashboardLayout title="لوحة تحكم المطور"><div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div></DashboardLayout>;
@@ -247,7 +349,7 @@ const AdminDashboard = () => {
         <div className="flex items-center justify-between ios-card px-5 py-3">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-destructive" />
-            <span className="text-destructive font-bold text-sm">وضع المطور – صلاحيات كاملة</span>
+            <span className="text-destructive font-bold text-sm">وضع المطور</span>
           </div>
           <div className="flex items-center gap-2">
             {pendingUsers.length > 0 && (
@@ -284,6 +386,10 @@ const AdminDashboard = () => {
                 { label: "الكراجات", value: garagesList.length, icon: Building2, color: "text-neon-orange" },
                 { label: "السيارات", value: cars.length, icon: Car, color: "text-accent" },
                 { label: "العملاء", value: customers.length, icon: Users, color: "text-neon-blue" },
+                { label: "بانتظار الموافقة", value: pendingUsers.length, icon: Clock, color: "text-neon-orange" },
+                { label: "كراجات بريميوم", value: garagesList.filter(g => g.is_premium).length, icon: Star, color: "text-neon-orange" },
+                { label: "الإشعارات", value: notifications.length, icon: Bell, color: "text-primary" },
+                { label: "موظفي الكراجات", value: garageUsers.length, icon: Wrench, color: "text-accent" },
               ].map(({ label, value, icon: Icon, color }) => (
                 <div key={label} className="ios-card p-5">
                   <Icon className={`w-6 h-6 ${color} mb-3`} />
@@ -306,6 +412,16 @@ const AdminDashboard = () => {
               <button onClick={() => setShowAddGarage(true)} className="ios-card p-5 flex items-center gap-3 hover:shadow-md transition-shadow">
                 <div className="w-12 h-12 rounded-2xl bg-neon-orange/10 flex items-center justify-center"><Building2 className="w-6 h-6 text-neon-orange" /></div>
                 <div className="text-right"><p className="font-bold text-foreground">إضافة كراج</p><p className="text-xs text-muted-foreground">كراج جديد</p></div>
+              </button>
+            </div>
+
+            {/* Export Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button onClick={exportUsers} className="ios-card p-4 flex items-center justify-center gap-2 text-primary font-bold hover:shadow-md transition-shadow">
+                <Download className="w-5 h-5" /> تصدير بيانات المستخدمين
+              </button>
+              <button onClick={exportCars} className="ios-card p-4 flex items-center justify-center gap-2 text-accent font-bold hover:shadow-md transition-shadow">
+                <Download className="w-5 h-5" /> تصدير بيانات السيارات
               </button>
             </div>
 
@@ -337,36 +453,65 @@ const AdminDashboard = () => {
         {/* APPROVALS */}
         {tab === "approvals" && (
           <div className="space-y-4 animate-slide-up">
-            <h3 className="font-bold text-foreground text-lg">طلبات الموافقة ({pendingUsers.length})</h3>
-            {pendingUsers.length === 0 ? (
+            <h3 className="font-bold text-foreground text-lg">طلبات الموافقة ({pendingUsers.length + pendingCars.length})</h3>
+            
+            {pendingUsers.length === 0 && pendingCars.length === 0 ? (
               <div className="ios-card p-12 text-center">
                 <Check className="w-12 h-12 text-accent mx-auto mb-3" />
                 <p className="text-muted-foreground">لا توجد طلبات بانتظار الموافقة</p>
               </div>
-            ) : pendingUsers.map(u => (
-              <div key={u.id} className="ios-card p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-neon-orange/10 flex items-center justify-center">
-                      <Users className="w-6 h-6 text-neon-orange" />
-                    </div>
-                    <div>
-                      <p className="text-foreground font-bold">{u.full_name}</p>
-                      <p className="text-sm text-muted-foreground">{u.phone}</p>
-                      <p className="text-[10px] text-muted-foreground">{new Date(u.created_at).toLocaleString("ar-OM")}</p>
+            ) : (
+              <>
+                {pendingUsers.map(u => (
+                  <div key={u.id} className="ios-card p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-neon-orange/10 flex items-center justify-center">
+                          <Users className="w-6 h-6 text-neon-orange" />
+                        </div>
+                        <div>
+                          <p className="text-foreground font-bold">{u.full_name}</p>
+                          <p className="text-sm text-muted-foreground">{u.phone}</p>
+                          <p className="text-[10px] text-muted-foreground">{new Date(u.created_at).toLocaleString("ar-OM")}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => approveUser(u.id)} className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center hover:bg-accent/20 transition-colors">
+                          <Check className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => rejectUser(u.id)} className="w-10 h-10 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive/20 transition-colors">
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => approveUser(u.id)} className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center hover:bg-accent/20 transition-colors">
-                      <Check className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => rejectUser(u.id)} className="w-10 h-10 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive/20 transition-colors">
-                      <XCircle className="w-5 h-5" />
-                    </button>
+                ))}
+                {pendingCars.map(car => (
+                  <div key={car.id} className="ios-card p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Car className="w-6 h-6 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-foreground font-bold">{car.make} {car.model} {car.year}</p>
+                          <p className="text-sm text-muted-foreground">{car.owner_name} • {car.plate_number}</p>
+                          {car.notes && <p className="text-xs text-muted-foreground mt-1">{car.notes}</p>}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => updateCarStatus(car.id, "received")} className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center hover:bg-accent/20 transition-colors">
+                          <Check className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => deleteCar(car.id)} className="w-10 h-10 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive/20 transition-colors">
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                ))}
+              </>
+            )}
           </div>
         )}
 
@@ -383,12 +528,18 @@ const AdminDashboard = () => {
               </button>
             </div>
 
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={exportUsers} className="px-3 py-1.5 rounded-xl bg-surface-2 text-muted-foreground text-xs font-bold flex items-center gap-1 hover:bg-surface-3">
+                <Download className="w-3 h-3" /> تصدير
+              </button>
+            </div>
+
             {filteredUsers.map(u => (
               <div key={u.id} className="ios-card p-4">
                 {editingUser === u.id ? (
                   <div className="space-y-3">
-                    <input value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} className="ios-input" placeholder="الاسم" />
-                    <input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="ios-input" placeholder="الهاتف" dir="ltr" />
+                    <input value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} className="ios-input" placeholder="الاسم (اليوزر نيم)" />
+                    <input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="ios-input" placeholder="الهاتف / كلمة المرور" dir="ltr" />
                     <select value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })} className="ios-input">
                       <option value="customer">عميل</option>
                       <option value="garage">كراج</option>
@@ -409,20 +560,26 @@ const AdminDashboard = () => {
                         <p className="text-foreground font-bold text-sm flex items-center gap-2">
                           {u.full_name}
                           {u.is_premium && <Star className="w-3.5 h-3.5 text-neon-orange" />}
+                          {!(u as any).approved && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-neon-orange/10 text-neon-orange">معلّق</span>}
                         </p>
                         <p className="text-xs text-muted-foreground">{u.phone}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       <span className={`text-[10px] px-2 py-1 rounded-full font-bold ${
                         u.role === "garage" ? "bg-neon-orange/10 text-neon-orange" :
                         u.role === "admin" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
                       }`}>{u.role === "garage" ? "كراج" : u.role === "admin" ? "أدمن" : "عميل"}</span>
-                      {u.role !== "admin" && (
+                      {u.id !== user?.id && (
                         <>
                           <button onClick={() => { setEditingUser(u.id); setEditForm({ full_name: u.full_name, phone: u.phone, password: u.password, role: u.role }); }} className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center text-muted-foreground hover:text-primary transition-colors">
                             <Edit className="w-3.5 h-3.5" />
                           </button>
+                          {(u as any).approved && u.role !== "admin" && (
+                            <button onClick={() => banUser(u.id)} className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center text-muted-foreground hover:text-neon-orange transition-colors" title="حظر">
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button onClick={() => deleteUser(u.id)} className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -486,9 +643,14 @@ const AdminDashboard = () => {
         {/* CARS TAB */}
         {tab === "cars" && (
           <div className="space-y-4 animate-slide-up">
-            <button onClick={() => setShowAddCar(true)} className="w-full ios-card p-4 flex items-center justify-center gap-2 border-2 border-dashed border-primary/30 hover:border-primary/60 text-primary font-bold">
-              <Plus className="w-5 h-5" /> إضافة سيارة
-            </button>
+            <div className="flex gap-3">
+              <button onClick={() => setShowAddCar(true)} className="flex-1 ios-card p-4 flex items-center justify-center gap-2 border-2 border-dashed border-primary/30 hover:border-primary/60 text-primary font-bold">
+                <Plus className="w-5 h-5" /> إضافة سيارة
+              </button>
+              <button onClick={exportCars} className="px-4 py-3 rounded-2xl bg-surface-2 text-muted-foreground font-bold text-sm flex items-center gap-2">
+                <Download className="w-4 h-4" /> تصدير
+              </button>
+            </div>
             <p className="text-muted-foreground text-sm">{cars.length} سيارة في النظام</p>
             {cars.map(car => (
               <div key={car.id} className="ios-card p-4">
@@ -509,15 +671,31 @@ const AdminDashboard = () => {
                       onChange={e => updateCarStatus(car.id, e.target.value)}
                       className="text-xs bg-surface-2 border border-border rounded-xl px-2 py-1.5 text-foreground focus:outline-none focus:border-primary"
                     >
-                      {(["received", "inspecting", "repairing", "waiting_parts", "ready"] as CarStatus[]).map(s => (
-                        <option key={s} value={s}>{statusLabels[s]}</option>
+                      {allStatuses.map(s => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
                       ))}
                     </select>
+                    <button onClick={() => setCustomStatusCar(customStatusCar === car.id ? null : car.id)} className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center text-muted-foreground hover:text-primary transition-colors" title="حالة مخصصة">
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => deleteCar(car.id)} className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
+                {customStatusCar === car.id && (
+                  <div className="mt-3 flex gap-2 animate-slide-up">
+                    <input 
+                      placeholder="اكتب حالة مخصصة (مثال: باقي 3 أيام)" 
+                      value={customStatusText} 
+                      onChange={e => setCustomStatusText(e.target.value)} 
+                      className="ios-input flex-1" 
+                    />
+                    <button onClick={() => updateCarStatus(car.id, customStatusText)} disabled={!customStatusText.trim()} className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-sm disabled:opacity-50">
+                      تطبيق
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -526,26 +704,36 @@ const AdminDashboard = () => {
         {/* NOTIFICATIONS TAB */}
         {tab === "notifications" && (
           <div className="space-y-4 animate-slide-up">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <button onClick={() => { setShowNotifForm(true); setNotifTarget("all"); }} className="ios-card p-4 flex items-center justify-center gap-2 text-primary font-bold hover:shadow-md transition-shadow">
                 <Bell className="w-5 h-5" /> إشعار عام
               </button>
               <button onClick={() => { setShowNotifForm(true); setNotifTarget("specific"); }} className="ios-card p-4 flex items-center justify-center gap-2 text-accent font-bold hover:shadow-md transition-shadow">
                 <Send className="w-5 h-5" /> رسالة خاصة
               </button>
+              <button onClick={deleteAllNotifications} className="ios-card p-4 flex items-center justify-center gap-2 text-destructive font-bold hover:shadow-md transition-shadow">
+                <Trash2 className="w-5 h-5" /> حذف الكل
+              </button>
             </div>
-            {notifications.slice(0, 30).map(n => {
+            {notifications.slice(0, 50).map(n => {
               const recipient = users.find(u => u.id === n.recipient_id);
               return (
                 <div key={n.id} className="ios-card p-4">
-                  <p className="text-foreground font-bold text-sm">{n.title}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-[10px] text-muted-foreground">إلى: {recipient?.full_name || "—"}</span>
-                    <span className="text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleString("ar-OM")}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${n.read ? "bg-accent/10 text-accent" : "bg-neon-orange/10 text-neon-orange"}`}>
-                      {n.read ? "مقروء" : "غير مقروء"}
-                    </span>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="text-foreground font-bold text-sm">{n.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{n.message}</p>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-[10px] text-muted-foreground">إلى: {recipient?.full_name || "—"}</span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(n.created_at).toLocaleString("ar-OM")}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${n.read ? "bg-accent/10 text-accent" : "bg-neon-orange/10 text-neon-orange"}`}>
+                          {n.read ? "مقروء" : "غير مقروء"}
+                        </span>
+                      </div>
+                    </div>
+                    <button onClick={() => deleteNotification(n.id)} className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors shrink-0">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               );
@@ -553,8 +741,89 @@ const AdminDashboard = () => {
           </div>
         )}
 
+        {/* SETTINGS TAB */}
+        {tab === "settings" && (
+          <div className="space-y-6 animate-slide-up">
+            <div className="ios-card p-6">
+              <h3 className="font-bold text-foreground text-lg mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-primary" /> صلاحيات المطور</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {developerPermissions.map(({ icon: Icon, label, desc }) => (
+                  <div key={label} className="flex items-center gap-3 bg-surface-2 rounded-2xl p-4">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <Icon className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-foreground font-bold text-sm">{label}</p>
+                      <p className="text-[10px] text-muted-foreground">{desc}</p>
+                    </div>
+                    <Check className="w-4 h-4 text-accent mr-auto shrink-0" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="ios-card p-6">
+              <h3 className="font-bold text-foreground text-lg mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-accent" /> إحصائيات سريعة</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-surface-2 rounded-2xl p-4 text-center">
+                  <p className="text-3xl font-bold text-primary">{users.length}</p>
+                  <p className="text-xs text-muted-foreground">إجمالي المستخدمين</p>
+                </div>
+                <div className="bg-surface-2 rounded-2xl p-4 text-center">
+                  <p className="text-3xl font-bold text-accent">{cars.filter(c => c.status === "ready").length}</p>
+                  <p className="text-xs text-muted-foreground">سيارات جاهزة</p>
+                </div>
+                <div className="bg-surface-2 rounded-2xl p-4 text-center">
+                  <p className="text-3xl font-bold text-neon-orange">{cars.filter(c => c.status === "repairing").length}</p>
+                  <p className="text-xs text-muted-foreground">قيد التصليح</p>
+                </div>
+                <div className="bg-surface-2 rounded-2xl p-4 text-center">
+                  <p className="text-3xl font-bold text-destructive">{pendingUsers.length}</p>
+                  <p className="text-xs text-muted-foreground">بانتظار الموافقة</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* LOGS TAB */}
+        {tab === "logs" && (
+          <div className="space-y-4 animate-slide-up">
+            <h3 className="font-bold text-foreground text-lg flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" /> سجل النشاط
+            </h3>
+            <div className="ios-card p-5">
+              <div className="space-y-3">
+                {users.slice(0, 10).map(u => (
+                  <div key={u.id} className="flex items-center justify-between bg-surface-2 rounded-2xl p-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${(u as any).approved ? "bg-accent" : "bg-neon-orange"}`} />
+                      <div>
+                        <p className="text-foreground text-sm font-bold">{u.full_name}</p>
+                        <p className="text-[10px] text-muted-foreground">تسجيل: {new Date(u.created_at).toLocaleString("ar-OM")}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">{u.role === "admin" ? "مطور" : u.role === "garage" ? "كراج" : "عميل"}</span>
+                  </div>
+                ))}
+                {cars.slice(0, 10).map(c => (
+                  <div key={c.id} className="flex items-center justify-between bg-surface-2 rounded-2xl p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-primary" />
+                      <div>
+                        <p className="text-foreground text-sm font-bold">{c.make} {c.model}</p>
+                        <p className="text-[10px] text-muted-foreground">{c.owner_name} • {new Date(c.created_at).toLocaleString("ar-OM")}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">{statusLabels[c.status as CarStatus] || c.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* MODALS */}
-        {/* Notification Form */}
         {showNotifForm && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/10 backdrop-blur-sm p-4" onClick={() => setShowNotifForm(false)}>
             <div className="ios-card p-6 w-full max-w-md space-y-4 animate-slide-up" onClick={e => e.stopPropagation()}>
@@ -579,7 +848,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Add User Modal */}
         {showAddUser && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/10 backdrop-blur-sm p-4" onClick={() => setShowAddUser(false)}>
             <div className="ios-card p-6 w-full max-w-md space-y-4 animate-slide-up" onClick={e => e.stopPropagation()}>
@@ -587,8 +855,8 @@ const AdminDashboard = () => {
                 <h3 className="text-foreground font-bold text-lg">إضافة مستخدم</h3>
                 <button onClick={() => setShowAddUser(false)} className="text-muted-foreground"><X className="w-5 h-5" /></button>
               </div>
-              <input placeholder="الاسم الرباعي" value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} className="ios-input" />
-              <input placeholder="رقم الهاتف" dir="ltr" value={newUser.phone} onChange={e => setNewUser({ ...newUser, phone: e.target.value })} className="ios-input" />
+              <input placeholder="الاسم الرباعي (اليوزر نيم)" value={newUser.fullName} onChange={e => setNewUser({ ...newUser, fullName: e.target.value })} className="ios-input" />
+              <input placeholder="رقم الهاتف (كلمة المرور)" dir="ltr" value={newUser.phone} onChange={e => setNewUser({ ...newUser, phone: e.target.value })} className="ios-input" />
               <select value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })} className="ios-input">
                 <option value="customer">عميل</option>
                 <option value="garage">كراج</option>
@@ -604,7 +872,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Add Garage Modal */}
         {showAddGarage && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/10 backdrop-blur-sm p-4" onClick={() => setShowAddGarage(false)}>
             <div className="ios-card p-6 w-full max-w-md space-y-4 animate-slide-up" onClick={e => e.stopPropagation()}>
@@ -631,7 +898,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Add Car Modal */}
         {showAddCar && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/10 backdrop-blur-sm p-4" onClick={() => setShowAddCar(false)}>
             <div className="ios-card p-6 w-full max-w-md space-y-4 animate-slide-up max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>

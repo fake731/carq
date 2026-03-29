@@ -1,8 +1,9 @@
 import { ReactNode, useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useTheme } from "@/lib/theme-context";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Bell, LogOut, Wrench, User, Car, MessageSquare, Home, Settings, X, Check } from "lucide-react";
+import { Bell, LogOut, Wrench, User, MessageSquare, Home, X, Check, Sun, Moon } from "lucide-react";
 
 interface Props {
   children: ReactNode;
@@ -11,6 +12,7 @@ interface Props {
 
 const DashboardLayout = ({ children, title }: Props) => {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -20,9 +22,9 @@ const DashboardLayout = ({ children, title }: Props) => {
   useEffect(() => {
     if (!user) return;
     const loadNotifs = async () => {
-      const { data, count } = await supabase
+      const { data } = await supabase
         .from("notifications")
-        .select("*", { count: "exact" })
+        .select("*")
         .eq("recipient_id", user.id)
         .order("created_at", { ascending: false })
         .limit(20);
@@ -31,7 +33,6 @@ const DashboardLayout = ({ children, title }: Props) => {
     };
     loadNotifs();
 
-    // Realtime notifications
     const channel = supabase
       .channel("notifs-" + user.id)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `recipient_id=eq.${user.id}` }, () => {
@@ -54,16 +55,34 @@ const DashboardLayout = ({ children, title }: Props) => {
     setUnreadCount(0);
   };
 
+  const deleteNotification = async (id: string) => {
+    await supabase.from("notifications").delete().eq("id", id);
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    setUnreadCount(prev => {
+      const notif = notifications.find(n => n.id === id);
+      return notif && !notif.read ? Math.max(0, prev - 1) : prev;
+    });
+  };
+
   const handleLogout = () => {
     logout();
     navigate("/");
   };
 
   const navItems = [
-    { path: "/dashboard", icon: Home, label: "الرئيسية" },
-    { path: "/chat", icon: MessageSquare, label: "الشات" },
-    { path: "/profile", icon: User, label: "الملف" },
+    { path: "/لوحة-التحكم", icon: Home, label: "الرئيسية" },
+    { path: "/المحادثات", icon: MessageSquare, label: "الشات" },
+    { path: "/الملف-الشخصي", icon: User, label: "الملف" },
   ];
+
+  const isActivePath = (path: string) => {
+    const altPaths: Record<string, string> = {
+      "/لوحة-التحكم": "/dashboard",
+      "/المحادثات": "/chat",
+      "/الملف-الشخصي": "/profile",
+    };
+    return location.pathname === path || location.pathname === altPaths[path];
+  };
 
   return (
     <div className="min-h-screen bg-background bg-animated">
@@ -78,6 +97,14 @@ const DashboardLayout = ({ children, title }: Props) => {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="w-9 h-9 rounded-xl bg-surface-2 flex items-center justify-center hover:bg-surface-3 transition-colors text-muted-foreground"
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+
             <button
               onClick={() => setShowNotifs(!showNotifs)}
               className="relative w-9 h-9 rounded-xl bg-surface-2 flex items-center justify-center hover:bg-surface-3 transition-colors"
@@ -125,9 +152,8 @@ const DashboardLayout = ({ children, title }: Props) => {
               ) : notifications.map(n => (
                 <div
                   key={n.id}
-                  onClick={() => !n.read && markRead(n.id)}
-                  className={`rounded-2xl p-4 transition-all cursor-pointer ${
-                    n.read ? "bg-surface-2" : "bg-primary/5 border border-primary/15 hover:bg-primary/10"
+                  className={`rounded-2xl p-4 transition-all ${
+                    n.read ? "bg-surface-2" : "bg-primary/5 border border-primary/15"
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -136,6 +162,12 @@ const DashboardLayout = ({ children, title }: Props) => {
                       <p className="text-sm font-bold text-foreground">{n.title}</p>
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{n.message}</p>
                       <p className="text-[10px] text-muted-foreground mt-2">{new Date(n.created_at).toLocaleString("ar-OM")}</p>
+                    </div>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      {!n.read && (
+                        <button onClick={() => markRead(n.id)} className="text-[10px] text-primary hover:underline">قراءة</button>
+                      )}
+                      <button onClick={() => deleteNotification(n.id)} className="text-[10px] text-destructive hover:underline">حذف</button>
                     </div>
                   </div>
                 </div>
@@ -150,11 +182,11 @@ const DashboardLayout = ({ children, title }: Props) => {
         {children}
       </main>
 
-      {/* Bottom Navigation - iOS Style */}
+      {/* Bottom Navigation */}
       <nav className="fixed bottom-0 inset-x-0 z-50 glass-strong border-t border-border/30 pb-safe">
         <div className="container flex items-center justify-around h-16 px-4">
           {navItems.map(({ path, icon: Icon, label }) => {
-            const isActive = location.pathname === path;
+            const isActive = isActivePath(path);
             return (
               <button
                 key={path}

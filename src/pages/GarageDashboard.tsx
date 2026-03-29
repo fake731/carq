@@ -23,6 +23,24 @@ const GarageDashboard = () => {
 
   const [newCar, setNewCar] = useState({ make: "", model: "", year: 2024, plateNumber: "", color: "", ownerName: "", ownerPhone: "", notes: "", estimatedCost: 0, estimatedTime: "" });
 
+  // Custom status
+  const [customStatusCar, setCustomStatusCar] = useState<string | null>(null);
+  const [customStatusText, setCustomStatusText] = useState("");
+
+  const allStatuses = [
+    { value: "received", label: "تم الاستلام" },
+    { value: "inspecting", label: "قيد الفحص" },
+    { value: "repairing", label: "قيد التصليح" },
+    { value: "waiting_parts", label: "بانتظار قطع" },
+    { value: "ready", label: "جاهزة" },
+    { value: "week_wait", label: "باقي أسبوع" },
+    { value: "two_weeks", label: "باقي أسبوعين" },
+    { value: "needs_time", label: "تحتاج وقت" },
+    { value: "not_started", label: "لم تبدأ" },
+    { value: "testing", label: "قيد التجربة" },
+    { value: "delivered", label: "تم التسليم" },
+  ];
+
   useEffect(() => { loadCars(); }, [user]);
 
   const loadCars = async () => {
@@ -61,32 +79,43 @@ const GarageDashboard = () => {
     }
   };
 
-  const updateCarStatus = async (carId: string, newStatus: CarStatus, car: CarRow) => {
+  const updateCarStatus = async (carId: string, newStatus: string, car: CarRow) => {
     await supabase.from("cars").update({ status: newStatus }).eq("id", carId);
-    await supabase.from("car_updates").insert({ car_id: carId, status: newStatus, message: `تحديث الحالة: ${statusLabels[newStatus]}` });
+    await supabase.from("car_updates").insert({ car_id: carId, status: newStatus, message: `تحديث الحالة: ${statusLabels[newStatus] || newStatus}` });
     const { data: ownerProfile } = await supabase.from("profiles").select("id").eq("phone", car.owner_phone).maybeSingle();
     if (ownerProfile) {
       await supabase.from("notifications").insert({
         recipient_id: ownerProfile.id, sender_id: user?.id,
-        title: "تحديث حالة السيارة", message: `${car.make} ${car.model}: ${statusLabels[newStatus]}`,
+        title: "تحديث حالة السيارة", message: `${car.make} ${car.model}: ${statusLabels[newStatus] || newStatus}`,
         type: "status",
       });
     }
-    toast.success(`تم تحديث الحالة: ${statusLabels[newStatus]}`);
+    toast.success(`تم تحديث الحالة`);
+    setCustomStatusCar(null);
+    setCustomStatusText("");
     loadCars();
   };
 
-  const uploadCarImage = async (carId: string, file: File) => {
+  const uploadCarImages = async (carId: string, files: FileList) => {
     setUploadingFor(carId);
-    const path = `cars/${carId}/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("car-images").upload(path, file);
-    if (error) { toast.error("فشل رفع الصورة"); setUploadingFor(null); return; }
-    const { data: { publicUrl } } = supabase.storage.from("car-images").getPublicUrl(path);
-    
     const car = cars.find(c => c.id === carId);
     const currentImages = car?.images || [];
-    await supabase.from("cars").update({ images: [...currentImages, publicUrl] }).eq("id", carId);
-    toast.success("تم رفع الصورة");
+    const newUrls: string[] = [];
+
+    for (let i = 0; i < Math.min(files.length, 10); i++) {
+      const file = files[i];
+      const path = `cars/${carId}/${Date.now()}-${i}-${file.name}`;
+      const { error } = await supabase.storage.from("car-images").upload(path, file);
+      if (!error) {
+        const { data: { publicUrl } } = supabase.storage.from("car-images").getPublicUrl(path);
+        newUrls.push(publicUrl);
+      }
+    }
+
+    if (newUrls.length > 0) {
+      await supabase.from("cars").update({ images: [...currentImages, ...newUrls] }).eq("id", carId);
+      toast.success(`تم رفع ${newUrls.length} صورة`);
+    }
     setUploadingFor(null);
     loadCars();
   };
@@ -121,11 +150,10 @@ const GarageDashboard = () => {
         {isPremium && (
           <div className="flex items-center gap-2 ios-card px-4 py-3">
             <Star className="w-5 h-5 text-neon-orange" />
-            <span className="text-neon-orange font-bold text-sm">كراج بريميوم – ميزات متقدمة</span>
+            <span className="text-neon-orange font-bold text-sm">كراج بريميوم</span>
           </div>
         )}
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {stats.map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="ios-card p-4">
@@ -136,7 +164,6 @@ const GarageDashboard = () => {
           ))}
         </div>
 
-        {/* Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <button onClick={() => setShowAddCar(true)} className="ios-card p-4 flex items-center justify-center gap-2 border-2 border-dashed border-primary/30 hover:border-primary/60 text-primary font-bold transition-colors">
             <Plus className="w-5 h-5" /> إضافة سيارة
@@ -146,7 +173,6 @@ const GarageDashboard = () => {
           </button>
         </div>
 
-        {/* Notification Form */}
         {showNotifForm && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/10 backdrop-blur-sm p-4" onClick={() => setShowNotifForm(false)}>
             <div className="ios-card p-6 w-full max-w-md space-y-4 animate-slide-up" onClick={e => e.stopPropagation()}>
@@ -161,7 +187,6 @@ const GarageDashboard = () => {
           </div>
         )}
 
-        {/* Add Car Modal */}
         {showAddCar && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/10 backdrop-blur-sm p-4" onClick={() => setShowAddCar(false)}>
             <div className="ios-card p-6 w-full max-w-md space-y-4 animate-slide-up max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -204,8 +229,8 @@ const GarageDashboard = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusColors[car.status as CarStatus]}`}>
-                    {statusLabels[car.status as CarStatus]}
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusColors[car.status] || "status-received"}`}>
+                    {statusLabels[car.status] || car.status}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${selectedCar === car.id ? "rotate-180" : ""}`} />
                 </div>
@@ -224,22 +249,36 @@ const GarageDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Status Buttons */}
+                  {/* Status Selection */}
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">تحديث الحالة:</p>
                     <div className="flex flex-wrap gap-2">
-                      {(["received", "inspecting", "repairing", "waiting_parts", "ready"] as CarStatus[]).map((status) => (
-                        <button key={status} onClick={() => updateCarStatus(car.id, status, car)}
+                      {allStatuses.map((status) => (
+                        <button key={status.value} onClick={() => updateCarStatus(car.id, status.value, car)}
                           className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                            car.status === status ? statusColors[status] + " shadow-md" : "border-border text-muted-foreground hover:border-primary/30"
+                            car.status === status.value ? (statusColors[status.value] || "status-received") + " shadow-md" : "border-border text-muted-foreground hover:border-primary/30"
                           }`}>
-                          {statusLabels[status]}
+                          {status.label}
                         </button>
                       ))}
                     </div>
+                    {/* Custom status */}
+                    <div className="mt-2 flex gap-2">
+                      <input 
+                        placeholder="حالة مخصصة..." 
+                        value={customStatusCar === car.id ? customStatusText : ""} 
+                        onChange={e => { setCustomStatusCar(car.id); setCustomStatusText(e.target.value); }} 
+                        className="ios-input flex-1 text-sm" 
+                      />
+                      {customStatusCar === car.id && customStatusText && (
+                        <button onClick={() => updateCarStatus(car.id, customStatusText, car)} className="px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-bold">
+                          تطبيق
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Image Upload */}
+                  {/* Multi Image Upload */}
                   <div>
                     <p className="text-sm text-muted-foreground mb-2">صور السيارة:</p>
                     {car.images && car.images.length > 0 && (
@@ -251,8 +290,8 @@ const GarageDashboard = () => {
                     )}
                     <label className="flex items-center justify-center gap-2 bg-surface-2 hover:bg-surface-3 rounded-2xl p-3 cursor-pointer transition-colors text-muted-foreground text-sm">
                       {uploadingFor === car.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                      {uploadingFor === car.id ? "جاري الرفع..." : "رفع صورة"}
-                      <input type="file" accept="image/*" onChange={e => e.target.files?.[0] && uploadCarImage(car.id, e.target.files[0])} className="hidden" />
+                      {uploadingFor === car.id ? "جاري الرفع..." : "رفع صور (يمكنك اختيار أكثر من صورة)"}
+                      <input type="file" accept="image/*" multiple onChange={e => e.target.files && uploadCarImages(car.id, e.target.files)} className="hidden" />
                     </label>
                   </div>
 

@@ -24,11 +24,9 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/لوحة-التحكم" element={<Dashboard />} />
-              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/المحادثات" element={<ChatPage />} />
-              <Route path="/chat" element={<ChatPage />} />
               <Route path="/الملف-الشخصي" element={<ProfilePage />} />
-              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/تسجيل-الدخول" element={<Index />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

@@ -15,6 +15,9 @@ const AuthPage = () => {
   const [credentials, setCredentials] = useState<{ username: string; password: string } | null>(null);
   const [recoveredProfile, setRecoveredProfile] = useState<Profile | null>(null);
   const [pendingApproval, setPendingApproval] = useState(false);
+  const [verifyCode, setVerifyCode] = useState("");
+  const [recoverStep, setRecoverStep] = useState<"search" | "verify">("search");
+  const [recoverIdentifier, setRecoverIdentifier] = useState("");
   const { login, loginWithProfile, register, recoverAccount } = useAuth();
   const navigate = useNavigate();
 
@@ -26,7 +29,7 @@ const AuthPage = () => {
     try {
       const result = await login(identifier, password);
       if (result.success) {
-        navigate("/dashboard");
+        navigate("/لوحة-التحكم");
       } else {
         if (result.suggestions && result.suggestions.length > 0) {
           setSuggestions(result.suggestions);
@@ -44,7 +47,7 @@ const AuthPage = () => {
       return;
     }
     loginWithProfile(profile);
-    navigate("/dashboard");
+    navigate("/لوحة-التحكم");
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -68,16 +71,24 @@ const AuthPage = () => {
     }
   };
 
-  const handleRecover = async (e: React.FormEvent) => {
+  const handleRecoverSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!identifier.trim()) { setError("الرجاء إدخال الاسم أو رقم الهاتف"); return; }
+    setRecoverIdentifier(identifier.trim());
+    setRecoverStep("verify");
+  };
+
+  const handleRecoverVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
     try {
-      const profile = await recoverAccount(identifier);
-      if (profile) {
-        setRecoveredProfile(profile);
+      const result = await recoverAccount(recoverIdentifier, verifyCode);
+      if (result.success && result.profile) {
+        setRecoveredProfile(result.profile);
       } else {
-        setError("لم يتم العثور على حساب بهذه البيانات");
+        setError(result.error || "فشل التحقق");
       }
     } finally {
       setIsLoading(false);
@@ -95,8 +106,8 @@ const AuthPage = () => {
   كلمة المرور: ${pwd}
 
 ═══════════════════════════════════════
-  ⚠️ احتفظ بهذا الملف في مكان آمن
-  ⚠️ Keep this file in a safe place
+  احتفظ بهذا الملف في مكان آمن
+  Keep this file in a safe place
 ═══════════════════════════════════════
 `;
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -128,7 +139,7 @@ const AuthPage = () => {
             </div>
             <div>
               <h2 className="text-xl font-bold text-foreground">
-                {pendingApproval ? "تم إرسال طلب التسجيل" : "تم التسجيل بنجاح!"}
+                {pendingApproval ? "تم إرسال طلب التسجيل" : "تم التسجيل بنجاح"}
               </h2>
               <p className="text-muted-foreground text-sm mt-1">
                 {pendingApproval
@@ -187,7 +198,7 @@ const AuthPage = () => {
               <Download className="w-5 h-5" /> تصدير البيانات
             </button>
             <button
-              onClick={() => { setRecoveredProfile(null); setMode("login"); }}
+              onClick={() => { setRecoveredProfile(null); setRecoverStep("search"); setVerifyCode(""); setMode("login"); }}
               className="ios-btn-primary"
             >
               الذهاب لتسجيل الدخول
@@ -239,13 +250,13 @@ const AuthPage = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-muted-foreground mb-2">كلمة المرور (رقم الهاتف)</label>
+                  <label className="block text-sm text-muted-foreground mb-2">كلمة المرور</label>
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="ios-input"
-                    placeholder="أدخل رقم هاتفك"
+                    placeholder="أدخل كلمة المرور"
                     dir="ltr"
                   />
                 </div>
@@ -276,7 +287,7 @@ const AuthPage = () => {
 
                 <button
                   type="button"
-                  onClick={() => { setMode("recover"); setError(""); }}
+                  onClick={() => { setMode("recover"); setError(""); setRecoverStep("search"); setVerifyCode(""); }}
                   className="w-full text-center text-sm text-primary hover:underline flex items-center justify-center gap-1"
                 >
                   <HelpCircle className="w-4 h-4" /> نسيت بياناتك؟
@@ -314,8 +325,8 @@ const AuthPage = () => {
               </form>
             )}
 
-            {mode === "recover" && (
-              <form onSubmit={handleRecover} className="space-y-4 animate-slide-up">
+            {mode === "recover" && recoverStep === "search" && (
+              <form onSubmit={handleRecoverSearch} className="space-y-4 animate-slide-up">
                 <p className="text-sm text-muted-foreground text-center">أدخل اسمك أو رقم هاتفك لاسترجاع بياناتك</p>
                 <input
                   type="text"
@@ -325,11 +336,31 @@ const AuthPage = () => {
                   placeholder="الاسم أو رقم الهاتف"
                 />
                 {error && <p className="text-destructive text-sm text-center">{error}</p>}
-                <button type="submit" disabled={isLoading} className="ios-btn-primary flex items-center justify-center gap-2">
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "استرجاع"}
-                </button>
+                <button type="submit" className="ios-btn-primary">التالي</button>
                 <button type="button" onClick={() => { setMode("login"); setError(""); }} className="w-full text-center text-sm text-primary hover:underline">
                   الرجوع لتسجيل الدخول
+                </button>
+              </form>
+            )}
+
+            {mode === "recover" && recoverStep === "verify" && (
+              <form onSubmit={handleRecoverVerify} className="space-y-4 animate-slide-up">
+                <p className="text-sm text-muted-foreground text-center">للتأكد من هويتك، أدخل أول 4 أرقام من كلمة المرور أو رقم الهاتف</p>
+                <input
+                  type="text"
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value)}
+                  className="ios-input text-center text-2xl tracking-widest"
+                  placeholder="_ _ _ _"
+                  dir="ltr"
+                  maxLength={4}
+                />
+                {error && <p className="text-destructive text-sm text-center">{error}</p>}
+                <button type="submit" disabled={isLoading} className="ios-btn-primary flex items-center justify-center gap-2">
+                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "تحقق"}
+                </button>
+                <button type="button" onClick={() => { setRecoverStep("search"); setError(""); }} className="w-full text-center text-sm text-primary hover:underline">
+                  رجوع
                 </button>
               </form>
             )}

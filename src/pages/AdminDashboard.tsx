@@ -332,8 +332,7 @@ const AdminDashboard = () => {
     manage_garages: Building2, manage_notifications: Bell,
   };
 
-  // Use the user icon from lucide
-  const User = Users;
+  const UserIcon = Users;
 
   if (loading) {
     return <DashboardLayout title="لوحة تحكم المطور"><div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div></DashboardLayout>;

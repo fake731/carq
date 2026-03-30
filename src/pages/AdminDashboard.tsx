@@ -322,7 +322,7 @@ const AdminDashboard = () => {
     add_car: Car, edit_car: Edit, delete_car: Trash2, view_cars: Eye,
     approve_requests: Check, reject_requests: XCircle, manage_requests: Layers,
     send_message: Send, read_messages: MessageSquare, delete_messages: Trash2,
-    edit_profile: User, upload_photos: Upload, delete_photos: Trash2,
+    edit_profile: Users, upload_photos: Upload, delete_photos: Trash2,
     add_rating: BarChart3, delete_rating: Trash2,
     manage_users: Users, ban_user: Ban, unban_user: Check,
     view_statistics: BarChart3, export_data: Download,

@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Wrench, Car, Shield, MessageSquare, Bell, ChevronLeft, LogIn } from "lucide-react";
+import { Wrench, Car, Shield, MessageSquare, Bell, LogIn } from "lucide-react";
+import AuthPage from "./AuthPage";
 
 const VisitorLanding = () => {
   const navigate = useNavigate();
   const [showLogin, setShowLogin] = useState(false);
 
   if (showLogin) {
-    // Dynamically import AuthPage
-    const AuthPage = require("./AuthPage").default;
     return <AuthPage />;
   }
 

@@ -3,8 +3,9 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { statusLabels, statusColors, CarStatus } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/integrations/supabase/client";
+import { ALL_PERMISSIONS, PERMISSION_LABELS, Permission } from "@/lib/permissions";
 import {
-  Users, Car, Building2, Bell, Send, Trash2, Shield, Activity, Star, Loader2, X,
+  Users, Car, Building2, Bell, Send, Trash2, Shield, Activity, Loader2, X,
   Search, RefreshCw, Phone, Clock, Plus, Edit, Check, XCircle, Save,
   UserPlus, Wrench, Download, Ban, Eye, Image as ImageIcon, Settings,
   Palette, Type, Globe, Calendar, FileText, BarChart3, Lock, Zap, 
@@ -20,7 +21,7 @@ type CarRow = Tables<"cars">;
 type NotificationRow = Tables<"notifications">;
 
 const AdminDashboard = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
   const [users, setUsers] = useState<ProfileRow[]>([]);
   const [cars, setCars] = useState<CarRow[]>([]);
@@ -29,7 +30,6 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Forms
   const [showNotifForm, setShowNotifForm] = useState(false);
   const [notifTitle, setNotifTitle] = useState("");
   const [notifMessage, setNotifMessage] = useState("");
@@ -48,7 +48,6 @@ const AdminDashboard = () => {
   const [showAddCar, setShowAddCar] = useState(false);
   const [newCar, setNewCar] = useState({ make: "", model: "", year: 2024, plateNumber: "", color: "", ownerName: "", ownerPhone: "", notes: "", estimatedCost: 0, estimatedTime: "", garageId: "" });
 
-  // Custom status input
   const [customStatusCar, setCustomStatusCar] = useState<string | null>(null);
   const [customStatusText, setCustomStatusText] = useState("");
 
@@ -84,6 +83,7 @@ const AdminDashboard = () => {
   const pendingCars = cars.filter(c => c.status === "pending");
 
   const approveUser = async (id: string) => {
+    if (!hasPermission("approve_requests")) { toast.error("ليس لديك صلاحية"); return; }
     await supabase.from("profiles").update({ approved: true } as any).eq("id", id);
     await supabase.from("notifications").insert({
       recipient_id: id, sender_id: user?.id,
@@ -95,12 +95,14 @@ const AdminDashboard = () => {
   };
 
   const rejectUser = async (id: string) => {
+    if (!hasPermission("reject_requests")) { toast.error("ليس لديك صلاحية"); return; }
     await supabase.from("profiles").delete().eq("id", id);
     toast.success("تم رفض الحساب");
     loadAll();
   };
 
   const deleteUser = async (id: string) => {
+    if (!hasPermission("manage_users")) { toast.error("ليس لديك صلاحية"); return; }
     if (id === user?.id) { toast.error("لا يمكنك حذف نفسك"); return; }
     await supabase.from("profiles").delete().eq("id", id);
     toast.success("تم حذف المستخدم");
@@ -108,18 +110,19 @@ const AdminDashboard = () => {
   };
 
   const banUser = async (id: string) => {
+    if (!hasPermission("ban_user")) { toast.error("ليس لديك صلاحية"); return; }
     await supabase.from("profiles").update({ approved: false } as any).eq("id", id);
     toast.success("تم حظر المستخدم");
     loadAll();
   };
 
   const updateUser = async (id: string) => {
-    const normalizedPhone = normalizePhone(editForm.phone);
+    if (!hasPermission("manage_users")) { toast.error("ليس لديك صلاحية"); return; }
     await supabase.from("profiles").update({
       full_name: editForm.full_name,
       username: editForm.full_name,
-      phone: normalizedPhone,
-      password: normalizedPhone,
+      phone: editForm.phone,
+      password: editForm.password || editForm.phone,
       role: editForm.role,
     }).eq("id", id);
     toast.success("تم تحديث البيانات");
@@ -128,6 +131,7 @@ const AdminDashboard = () => {
   };
 
   const createUser = async () => {
+    if (!hasPermission("manage_users")) { toast.error("ليس لديك صلاحية"); return; }
     if (!newUser.fullName || !newUser.phone) { toast.error("الرجاء تعبئة البيانات"); return; }
     const normalizedPhone = normalizePhone(newUser.phone);
     const insertData: any = {
@@ -156,6 +160,7 @@ const AdminDashboard = () => {
   };
 
   const createGarage = async () => {
+    if (!hasPermission("manage_garages")) { toast.error("ليس لديك صلاحية"); return; }
     if (!newGarage.name) { toast.error("الرجاء إدخال اسم الكراج"); return; }
     const garageId = newGarage.name.replace(/\s/g, "_").toLowerCase();
     await supabase.from("garages").insert({
@@ -178,12 +183,14 @@ const AdminDashboard = () => {
   };
 
   const deleteGarage = async (id: string) => {
+    if (!hasPermission("manage_garages")) { toast.error("ليس لديك صلاحية"); return; }
     await supabase.from("garages").delete().eq("id", id);
     toast.success("تم حذف الكراج");
     loadAll();
   };
 
   const addCarByAdmin = async () => {
+    if (!hasPermission("add_car")) { toast.error("ليس لديك صلاحية"); return; }
     if (!newCar.make || !newCar.ownerName || !newCar.ownerPhone) { toast.error("الرجاء تعبئة الحقول المطلوبة"); return; }
     const { error } = await supabase.from("cars").insert({
       make: newCar.make, model: newCar.model, year: newCar.year,
@@ -201,6 +208,7 @@ const AdminDashboard = () => {
   };
 
   const updateCarStatus = async (carId: string, newStatus: string) => {
+    if (!hasPermission("edit_car")) { toast.error("ليس لديك صلاحية"); return; }
     await supabase.from("cars").update({ status: newStatus }).eq("id", carId);
     const car = cars.find(c => c.id === carId);
     if (car) {
@@ -221,24 +229,28 @@ const AdminDashboard = () => {
   };
 
   const deleteCar = async (id: string) => {
+    if (!hasPermission("delete_car")) { toast.error("ليس لديك صلاحية"); return; }
     await supabase.from("cars").delete().eq("id", id);
     toast.success("تم حذف السيارة");
     loadAll();
   };
 
   const deleteNotification = async (id: string) => {
+    if (!hasPermission("manage_notifications")) { toast.error("ليس لديك صلاحية"); return; }
     await supabase.from("notifications").delete().eq("id", id);
     toast.success("تم حذف الإشعار");
     loadAll();
   };
 
   const deleteAllNotifications = async () => {
+    if (!hasPermission("manage_notifications")) { toast.error("ليس لديك صلاحية"); return; }
     await supabase.from("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     toast.success("تم حذف جميع الإشعارات");
     loadAll();
   };
 
   const sendNotification = async () => {
+    if (!hasPermission("manage_notifications")) { toast.error("ليس لديك صلاحية"); return; }
     if (!notifTitle.trim() || !notifMessage.trim()) { toast.error("الرجاء تعبئة البيانات"); return; }
     if (notifTarget === "all") {
       const allUsers = users.filter(u => u.role !== "admin");
@@ -261,6 +273,7 @@ const AdminDashboard = () => {
   };
 
   const exportUsers = () => {
+    if (!hasPermission("export_data")) { toast.error("ليس لديك صلاحية"); return; }
     const csv = "الاسم,الهاتف,الدور,الحالة,تاريخ التسجيل\n" + 
       users.map(u => `${u.full_name},${u.phone},${u.role},${(u as any).approved ? "مفعّل" : "معلّق"},${u.created_at}`).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
@@ -272,6 +285,7 @@ const AdminDashboard = () => {
   };
 
   const exportCars = () => {
+    if (!hasPermission("export_data")) { toast.error("ليس لديك صلاحية"); return; }
     const csv = "الماركة,الموديل,اللوحة,اللون,المالك,الحالة\n" + 
       cars.map(c => `${c.make},${c.model},${c.plate_number},${c.color || ""},${c.owner_name},${c.status}`).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
@@ -287,7 +301,6 @@ const AdminDashboard = () => {
     ? users.filter(u => u.full_name.includes(searchQuery) || u.username.includes(searchQuery) || u.phone.includes(searchQuery))
     : users;
 
-  // Extended status list for cars
   const allStatuses: { value: string; label: string }[] = [
     { value: "received", label: "تم الاستلام" },
     { value: "inspecting", label: "قيد الفحص" },
@@ -304,39 +317,22 @@ const AdminDashboard = () => {
     { value: "delivered", label: "تم التسليم" },
   ];
 
-  // Developer permissions list
-  const developerPermissions = [
-    { icon: Users, label: "إدارة المستخدمين", desc: "إنشاء وتعديل وحذف الحسابات" },
-    { icon: Building2, label: "إدارة الكراجات", desc: "إنشاء وتعديل وحذف الكراجات" },
-    { icon: Car, label: "إدارة السيارات", desc: "إضافة وتحديث حالة السيارات" },
-    { icon: Bell, label: "إدارة الإشعارات", desc: "إرسال وحذف الإشعارات" },
-    { icon: MessageSquare, label: "الشات المباشر", desc: "التواصل مع جميع المستخدمين" },
-    { icon: Lock, label: "تغيير كلمات المرور", desc: "إعادة تعيين كلمات مرور المستخدمين" },
-    { icon: Ban, label: "حظر المستخدمين", desc: "تعليق أو حظر الحسابات" },
-    { icon: Check, label: "الموافقة على التسجيل", desc: "قبول أو رفض طلبات التسجيل" },
-    { icon: Download, label: "تصدير البيانات", desc: "تصدير بيانات المستخدمين والسيارات" },
-    { icon: Star, label: "إدارة البريميوم", desc: "تحديد حالة الكراجات المميزة" },
-    { icon: Palette, label: "تخصيص الألوان", desc: "تعديل ألوان وتصميم النظام" },
-    { icon: Type, label: "تعديل النصوص", desc: "تغيير العناوين والنصوص" },
-    { icon: ImageIcon, label: "رفع الصور", desc: "إضافة صور وشعارات للنظام" },
-    { icon: Globe, label: "إعدادات عامة", desc: "التحكم بالإعدادات العامة" },
-    { icon: Calendar, label: "جدولة المواعيد", desc: "تحديد أيام وساعات العمل" },
-    { icon: FileText, label: "سجل النشاط", desc: "مراقبة كل الأنشطة بالنظام" },
-    { icon: BarChart3, label: "الإحصائيات", desc: "عرض تقارير وإحصائيات مفصلة" },
-    { icon: Database, label: "إدارة البيانات", desc: "التحكم الكامل بقاعدة البيانات" },
-    { icon: Upload, label: "رفع الملفات", desc: "رفع فواتير ومستندات" },
-    { icon: AlertTriangle, label: "تنبيهات مخصصة", desc: "إنشاء تنبيهات حسب الحاجة" },
-    { icon: Hash, label: "إدارة الأرقام", desc: "التحكم بأرقام اللوحات والهواتف" },
-    { icon: Layers, label: "إدارة الحالات", desc: "إضافة حالات مخصصة للسيارات" },
-    { icon: Gauge, label: "مراقبة الأداء", desc: "مراقبة أداء النظام" },
-    { icon: Zap, label: "إجراءات سريعة", desc: "تنفيذ عمليات جماعية" },
-    { icon: Wrench, label: "صيانة النظام", desc: "أدوات صيانة وإصلاح" },
-    { icon: Eye, label: "عرض كل البيانات", desc: "الوصول الكامل لجميع المعلومات" },
-    { icon: Settings, label: "إعدادات متقدمة", desc: "تكوين متقدم للنظام" },
-    { icon: RefreshCw, label: "مزامنة البيانات", desc: "تحديث ومزامنة كل البيانات" },
-    { icon: Phone, label: "إدارة الاتصالات", desc: "التحكم بالرسائل والمكالمات" },
-    { icon: Shield, label: "الأمان والحماية", desc: "إدارة صلاحيات الأمان" },
-  ];
+  // Real permissions with icons
+  const permissionIcons: Record<string, typeof Users> = {
+    add_car: Car, edit_car: Edit, delete_car: Trash2, view_cars: Eye,
+    approve_requests: Check, reject_requests: XCircle, manage_requests: Layers,
+    send_message: Send, read_messages: MessageSquare, delete_messages: Trash2,
+    edit_profile: Users, upload_photos: Upload, delete_photos: Trash2,
+    add_rating: BarChart3, delete_rating: Trash2,
+    manage_users: Users, ban_user: Ban, unban_user: Check,
+    view_statistics: BarChart3, export_data: Download,
+    manage_settings: Settings, access_dashboard: Gauge,
+    manage_comments: MessageSquare, delete_comments: Trash2, pin_comments: Zap,
+    edit_themes: Palette, resize_text: Type, edit_text: Type,
+    manage_garages: Building2, manage_notifications: Bell,
+  };
+
+  
 
   if (loading) {
     return <DashboardLayout title="لوحة تحكم المطور"><div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div></DashboardLayout>;
@@ -387,7 +383,7 @@ const AdminDashboard = () => {
                 { label: "السيارات", value: cars.length, icon: Car, color: "text-accent" },
                 { label: "العملاء", value: customers.length, icon: Users, color: "text-neon-blue" },
                 { label: "بانتظار الموافقة", value: pendingUsers.length, icon: Clock, color: "text-neon-orange" },
-                { label: "كراجات بريميوم", value: garagesList.filter(g => g.is_premium).length, icon: Star, color: "text-neon-orange" },
+                { label: "كراجات بريميوم", value: garagesList.filter(g => g.is_premium).length, icon: Building2, color: "text-neon-orange" },
                 { label: "الإشعارات", value: notifications.length, icon: Bell, color: "text-primary" },
                 { label: "موظفي الكراجات", value: garageUsers.length, icon: Wrench, color: "text-accent" },
               ].map(({ label, value, icon: Icon, color }) => (
@@ -399,7 +395,6 @@ const AdminDashboard = () => {
               ))}
             </div>
 
-            {/* Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <button onClick={() => { setShowNotifForm(true); setNotifTarget("all"); }} className="ios-card p-5 flex items-center gap-3 hover:shadow-md transition-shadow">
                 <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center"><Bell className="w-6 h-6 text-primary" /></div>
@@ -415,7 +410,6 @@ const AdminDashboard = () => {
               </button>
             </div>
 
-            {/* Export Actions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button onClick={exportUsers} className="ios-card p-4 flex items-center justify-center gap-2 text-primary font-bold hover:shadow-md transition-shadow">
                 <Download className="w-5 h-5" /> تصدير بيانات المستخدمين
@@ -425,7 +419,6 @@ const AdminDashboard = () => {
               </button>
             </div>
 
-            {/* Recent Users */}
             <div className="ios-card p-5">
               <h3 className="font-bold text-foreground text-lg mb-4">آخر التسجيلات</h3>
               <div className="space-y-3">
@@ -495,7 +488,7 @@ const AdminDashboard = () => {
                         </div>
                         <div>
                           <p className="text-foreground font-bold">{car.make} {car.model} {car.year}</p>
-                          <p className="text-sm text-muted-foreground">{car.owner_name} • {car.plate_number}</p>
+                          <p className="text-sm text-muted-foreground">{car.owner_name} - {car.plate_number}</p>
                           {car.notes && <p className="text-xs text-muted-foreground mt-1">{car.notes}</p>}
                         </div>
                       </div>
@@ -539,7 +532,8 @@ const AdminDashboard = () => {
                 {editingUser === u.id ? (
                   <div className="space-y-3">
                     <input value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} className="ios-input" placeholder="الاسم (اليوزر نيم)" />
-                    <input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="ios-input" placeholder="الهاتف / كلمة المرور" dir="ltr" />
+                    <input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="ios-input" placeholder="الهاتف" dir="ltr" />
+                    <input value={editForm.password} onChange={e => setEditForm({ ...editForm, password: e.target.value })} className="ios-input" placeholder="كلمة المرور" dir="ltr" />
                     <select value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })} className="ios-input">
                       <option value="customer">عميل</option>
                       <option value="garage">كراج</option>
@@ -559,7 +553,6 @@ const AdminDashboard = () => {
                       <div>
                         <p className="text-foreground font-bold text-sm flex items-center gap-2">
                           {u.full_name}
-                          {u.is_premium && <Star className="w-3.5 h-3.5 text-neon-orange" />}
                           {!(u as any).approved && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-neon-orange/10 text-neon-orange">معلّق</span>}
                         </p>
                         <p className="text-xs text-muted-foreground">{u.phone}</p>
@@ -613,7 +606,7 @@ const AdminDashboard = () => {
                     <div>
                       <p className="text-foreground font-bold text-lg flex items-center gap-2">
                         {g.name}
-                        {g.is_premium && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neon-orange/10 text-neon-orange flex items-center gap-1"><Star className="w-3 h-3" /> بريميوم</span>}
+                        {g.is_premium && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neon-orange/10 text-neon-orange">بريميوم</span>}
                       </p>
                       {g.phone && <p className="text-sm text-muted-foreground">{g.phone}</p>}
                       {g.address && <p className="text-xs text-muted-foreground">{g.address}</p>}
@@ -661,7 +654,7 @@ const AdminDashboard = () => {
                     </div>
                     <div>
                       <p className="text-foreground font-bold">{car.make} {car.model} {car.year}</p>
-                      <p className="text-xs text-muted-foreground">{car.owner_name} • {car.plate_number}</p>
+                      <p className="text-xs text-muted-foreground">{car.owner_name} - {car.plate_number}</p>
                       {car.color && <p className="text-[10px] text-muted-foreground">اللون: {car.color}</p>}
                     </div>
                   </div>
@@ -745,20 +738,23 @@ const AdminDashboard = () => {
         {tab === "settings" && (
           <div className="space-y-6 animate-slide-up">
             <div className="ios-card p-6">
-              <h3 className="font-bold text-foreground text-lg mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-primary" /> صلاحيات المطور</h3>
+              <h3 className="font-bold text-foreground text-lg mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-primary" /> صلاحيات المطور ({ALL_PERMISSIONS.length} صلاحية)</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {developerPermissions.map(({ icon: Icon, label, desc }) => (
-                  <div key={label} className="flex items-center gap-3 bg-surface-2 rounded-2xl p-4">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <Icon className="w-5 h-5 text-primary" />
+                {ALL_PERMISSIONS.map((perm) => {
+                  const Icon = permissionIcons[perm] || Settings;
+                  const isActive = hasPermission(perm);
+                  return (
+                    <div key={perm} className={`flex items-center gap-3 rounded-2xl p-4 ${isActive ? "bg-accent/5 border border-accent/20" : "bg-surface-2"}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isActive ? "bg-accent/10" : "bg-surface-3"}`}>
+                        <Icon className={`w-5 h-5 ${isActive ? "text-accent" : "text-muted-foreground"}`} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-foreground font-bold text-sm">{PERMISSION_LABELS[perm]}</p>
+                      </div>
+                      {isActive && <Check className="w-4 h-4 text-accent shrink-0" />}
                     </div>
-                    <div>
-                      <p className="text-foreground font-bold text-sm">{label}</p>
-                      <p className="text-[10px] text-muted-foreground">{desc}</p>
-                    </div>
-                    <Check className="w-4 h-4 text-accent mr-auto shrink-0" />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -812,7 +808,7 @@ const AdminDashboard = () => {
                       <div className="w-2 h-2 rounded-full bg-primary" />
                       <div>
                         <p className="text-foreground text-sm font-bold">{c.make} {c.model}</p>
-                        <p className="text-[10px] text-muted-foreground">{c.owner_name} • {new Date(c.created_at).toLocaleString("ar-OM")}</p>
+                        <p className="text-[10px] text-muted-foreground">{c.owner_name} - {new Date(c.created_at).toLocaleString("ar-OM")}</p>
                       </div>
                     </div>
                     <span className="text-[10px] text-muted-foreground">{statusLabels[c.status as CarStatus] || c.status}</span>
@@ -879,15 +875,15 @@ const AdminDashboard = () => {
                 <h3 className="text-foreground font-bold text-lg">إضافة كراج</h3>
                 <button onClick={() => setShowAddGarage(false)} className="text-muted-foreground"><X className="w-5 h-5" /></button>
               </div>
-              <input placeholder="اسم الكراج *" value={newGarage.name} onChange={e => setNewGarage({ ...newGarage, name: e.target.value })} className="ios-input" />
+              <input placeholder="اسم الكراج" value={newGarage.name} onChange={e => setNewGarage({ ...newGarage, name: e.target.value })} className="ios-input" />
               <input placeholder="رقم هاتف الكراج" dir="ltr" value={newGarage.phone} onChange={e => setNewGarage({ ...newGarage, phone: e.target.value })} className="ios-input" />
               <input placeholder="العنوان" value={newGarage.address} onChange={e => setNewGarage({ ...newGarage, address: e.target.value })} className="ios-input" />
               <label className="flex items-center gap-3 cursor-pointer bg-surface-2 rounded-2xl p-3">
                 <input type="checkbox" checked={newGarage.isPremium} onChange={e => setNewGarage({ ...newGarage, isPremium: e.target.checked })} className="w-5 h-5 rounded accent-neon-orange" />
-                <span className="text-foreground text-sm font-bold">كراج بريميوم ⭐</span>
+                <span className="text-foreground text-sm font-bold">كراج بريميوم</span>
               </label>
               <div className="border-t border-border pt-3">
-                <p className="text-muted-foreground text-xs mb-3">صاحب الكراج (اختياري)</p>
+                <p className="text-muted-foreground text-xs mb-3">صاحب الكراج</p>
                 <input placeholder="اسم المالك" value={newGarage.ownerName} onChange={e => setNewGarage({ ...newGarage, ownerName: e.target.value })} className="ios-input mb-3" />
                 <input placeholder="هاتف المالك" dir="ltr" value={newGarage.ownerPhone} onChange={e => setNewGarage({ ...newGarage, ownerPhone: e.target.value })} className="ios-input" />
               </div>
@@ -906,25 +902,25 @@ const AdminDashboard = () => {
                 <button onClick={() => setShowAddCar(false)} className="text-muted-foreground"><X className="w-5 h-5" /></button>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <input placeholder="الماركة *" value={newCar.make} onChange={e => setNewCar({ ...newCar, make: e.target.value })} className="ios-input" />
+                <input placeholder="الماركة" value={newCar.make} onChange={e => setNewCar({ ...newCar, make: e.target.value })} className="ios-input" />
                 <input placeholder="الموديل" value={newCar.model} onChange={e => setNewCar({ ...newCar, model: e.target.value })} className="ios-input" />
                 <input type="number" placeholder="السنة" value={newCar.year} onChange={e => setNewCar({ ...newCar, year: parseInt(e.target.value) })} className="ios-input" />
                 <input placeholder="رقم اللوحة" value={newCar.plateNumber} onChange={e => setNewCar({ ...newCar, plateNumber: e.target.value })} className="ios-input" />
               </div>
-              <input placeholder="اللون (مثال: أزرق فاتح)" value={newCar.color} onChange={e => setNewCar({ ...newCar, color: e.target.value })} className="ios-input" />
-              <input placeholder="اسم المالك *" value={newCar.ownerName} onChange={e => setNewCar({ ...newCar, ownerName: e.target.value })} className="ios-input" />
-              <input placeholder="هاتف المالك *" dir="ltr" value={newCar.ownerPhone} onChange={e => setNewCar({ ...newCar, ownerPhone: e.target.value })} className="ios-input" />
-              <select value={newCar.garageId} onChange={e => setNewCar({ ...newCar, garageId: e.target.value })} className="ios-input">
-                <option value="">اختر الكراج</option>
-                {garagesList.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
+              <input placeholder="اللون" value={newCar.color} onChange={e => setNewCar({ ...newCar, color: e.target.value })} className="ios-input" />
+              <input placeholder="اسم المالك" value={newCar.ownerName} onChange={e => setNewCar({ ...newCar, ownerName: e.target.value })} className="ios-input" />
+              <input placeholder="هاتف المالك" dir="ltr" value={newCar.ownerPhone} onChange={e => setNewCar({ ...newCar, ownerPhone: e.target.value })} className="ios-input" />
               <div className="grid grid-cols-2 gap-3">
                 <input type="number" placeholder="التكلفة (ر.ع)" value={newCar.estimatedCost || ""} onChange={e => setNewCar({ ...newCar, estimatedCost: parseFloat(e.target.value) || 0 })} className="ios-input" />
                 <input placeholder="الوقت المتوقع" value={newCar.estimatedTime} onChange={e => setNewCar({ ...newCar, estimatedTime: e.target.value })} className="ios-input" />
               </div>
+              <select value={newCar.garageId} onChange={e => setNewCar({ ...newCar, garageId: e.target.value })} className="ios-input">
+                <option value="">اختر الكراج</option>
+                {garagesList.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
               <textarea placeholder="ملاحظات..." value={newCar.notes} onChange={e => setNewCar({ ...newCar, notes: e.target.value })} rows={2} className="ios-input resize-none" />
               <button onClick={addCarByAdmin} className="ios-btn-primary flex items-center justify-center gap-2">
-                <Save className="w-5 h-5" /> حفظ السيارة
+                <Save className="w-5 h-5" /> حفظ
               </button>
             </div>
           </div>

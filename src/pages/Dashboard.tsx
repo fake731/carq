@@ -16,7 +16,7 @@ const Dashboard = () => {
     );
   }
 
-  if (!isAuthenticated) return <Navigate to="/" replace />;
+  if (!isAuthenticated) return <Navigate to="/تسجيل-الدخول" replace />;
 
   switch (user?.role) {
     case "admin":

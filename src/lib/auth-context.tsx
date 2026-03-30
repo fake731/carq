@@ -2,6 +2,7 @@ import { createContext, useContext, useState, ReactNode, useEffect } from "react
 import { supabase } from "@/integrations/supabase/client";
 import { normalizePhone, phonesMatch } from "./phone-utils";
 import { arabicNamesMatch, getMatchScore, normalizeArabic } from "./arabic-utils";
+import { Permission, getPermissionsForRole } from "./permissions";
 
 export interface Profile {
   id: string;
@@ -21,11 +22,13 @@ export interface Profile {
 
 interface AuthContextType {
   user: Profile | null;
+  permissions: Permission[];
+  hasPermission: (p: Permission) => boolean;
   login: (identifier: string, password: string) => Promise<{ success: boolean; suggestions?: Profile[]; error?: string }>;
   loginWithProfile: (profile: Profile) => void;
   register: (fullName: string, phone: string) => Promise<{ success: boolean; username: string; password: string } | { success: false; error: string }>;
   logout: () => void;
-  recoverAccount: (identifier: string) => Promise<Profile | null>;
+  recoverAccount: (identifier: string, verifyCode: string) => Promise<{ success: boolean; profile?: Profile; error?: string }>;
   isAuthenticated: boolean;
   loading: boolean;
   refreshUser: () => Promise<void>;
@@ -33,9 +36,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Admin credentials
+const ADMIN_USERNAME = "bmw5555";
+const ADMIN_PASSWORD = "123456789@#$";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const permissions = user ? getPermissionsForRole(user.role) : [];
+  const checkPermission = (p: Permission) => permissions.includes(p);
 
   useEffect(() => {
     const saved = localStorage.getItem("smart_garage_user");
@@ -64,6 +74,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (identifier: string, password: string) => {
+    // Check admin credentials first
+    if (normalizeArabic(identifier.trim()) === ADMIN_USERNAME && password.trim() === ADMIN_PASSWORD) {
+      // Find or create admin profile
+      const { data: adminProfile } = await supabase.from("profiles").select("*").eq("username", ADMIN_USERNAME).maybeSingle();
+      if (adminProfile) {
+        setUser(adminProfile as Profile);
+        localStorage.setItem("smart_garage_user", JSON.stringify(adminProfile));
+        return { success: true };
+      }
+      // Create admin if not exists
+      const { data: newAdmin } = await supabase.from("profiles").insert({
+        username: ADMIN_USERNAME, password: ADMIN_PASSWORD,
+        full_name: "المطور الرئيسي", phone: ADMIN_PASSWORD,
+        role: "admin", approved: true,
+      }).select().single();
+      if (newAdmin) {
+        setUser(newAdmin as Profile);
+        localStorage.setItem("smart_garage_user", JSON.stringify(newAdmin));
+        return { success: true };
+      }
+    }
+
     // Get all profiles for smart matching
     const { data: allProfiles } = await supabase.from("profiles").select("*");
     if (!allProfiles || allProfiles.length === 0) {
@@ -77,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     if (exactMatch) {
-      if (phonesMatch(exactMatch.password, password)) {
+      if (exactMatch.password === password.trim() || phonesMatch(exactMatch.password, password)) {
         if (!exactMatch.approved) return { success: false, error: "حسابك قيد المراجعة من قبل الإدارة" };
         setUser(exactMatch as Profile);
         localStorage.setItem("smart_garage_user", JSON.stringify(exactMatch));
@@ -86,19 +118,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "كلمة المرور غير صحيحة" };
     }
 
-    // 2. Smart Arabic name matching - match first 2 names or first name + partial
+    // 2. Smart Arabic name matching
     const smartMatches = allProfiles.filter(p => arabicNamesMatch(identifier.trim(), p.full_name));
     
     if (smartMatches.length > 0) {
-      // Sort by match score
       smartMatches.sort((a, b) => getMatchScore(identifier, b.full_name) - getMatchScore(identifier, a.full_name));
       
-      // Check password for matches
-      const passwordMatches = smartMatches.filter(p => phonesMatch(p.password, password));
+      const passwordMatches = smartMatches.filter(p => p.password === password.trim() || phonesMatch(p.password, password));
       
       if (passwordMatches.length === 1) {
         if (!passwordMatches[0].approved) return { success: false, error: "حسابك قيد المراجعة من قبل الإدارة" };
-        // Auto-login with the matched profile
         setUser(passwordMatches[0] as Profile);
         localStorage.setItem("smart_garage_user", JSON.stringify(passwordMatches[0]));
         return { success: true };
@@ -108,7 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, suggestions: passwordMatches as Profile[] };
       }
       
-      // Password doesn't match but names found - show suggestions
       return { success: false, suggestions: smartMatches.slice(0, 5) as Profile[], error: "كلمة المرور غير صحيحة" };
     }
 
@@ -142,24 +170,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: false as const, error: "حدث خطأ أثناء التسجيل" };
   };
 
-  const recoverAccount = async (identifier: string): Promise<Profile | null> => {
+  const recoverAccount = async (identifier: string, verifyCode: string): Promise<{ success: boolean; profile?: Profile; error?: string }> => {
     const { data: all } = await supabase.from("profiles").select("*");
-    if (!all) return null;
+    if (!all) return { success: false, error: "لم يتم العثور على حسابات" };
+    
+    // Find profile
+    let found: Profile | undefined;
     
     const byPhone = all.find(p => phonesMatch(p.phone, identifier));
-    if (byPhone) return byPhone as Profile;
+    if (byPhone) found = byPhone as Profile;
     
-    // Smart Arabic name match
-    const nameMatches = all.filter(p => arabicNamesMatch(identifier.trim(), p.full_name));
-    if (nameMatches.length > 0) {
-      nameMatches.sort((a, b) => getMatchScore(identifier, b.full_name) - getMatchScore(identifier, a.full_name));
-      return nameMatches[0] as Profile;
+    if (!found) {
+      const nameMatches = all.filter(p => arabicNamesMatch(identifier.trim(), p.full_name));
+      if (nameMatches.length > 0) {
+        nameMatches.sort((a, b) => getMatchScore(identifier, b.full_name) - getMatchScore(identifier, a.full_name));
+        found = nameMatches[0] as Profile;
+      }
     }
 
-    const byUsername = all.find(p => p.username === identifier.trim());
-    if (byUsername) return byUsername as Profile;
+    if (!found) {
+      const byUsername = all.find(p => p.username === identifier.trim());
+      if (byUsername) found = byUsername as Profile;
+    }
 
-    return null;
+    if (!found) return { success: false, error: "لم يتم العثور على حساب بهذه البيانات" };
+
+    // Verify: first 4 chars of password or phone must match
+    const passFirst4 = found.password.replace(/\D/g, '').slice(0, 4);
+    const phoneFirst4 = found.phone.replace(/\D/g, '').slice(0, 4);
+    const codeClean = verifyCode.replace(/\D/g, '').slice(0, 4);
+
+    if (codeClean.length < 4) {
+      return { success: false, error: "الرجاء إدخال أول 4 أرقام من كلمة المرور أو الهاتف" };
+    }
+
+    if (codeClean !== passFirst4 && codeClean !== phoneFirst4) {
+      return { success: false, error: "رمز التحقق غير صحيح" };
+    }
+
+    return { success: true, profile: found };
   };
 
   const logout = () => {
@@ -168,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, loginWithProfile, register, logout, recoverAccount, isAuthenticated: !!user, loading, refreshUser }}>
+    <AuthContext.Provider value={{ user, permissions, hasPermission: checkPermission, login, loginWithProfile, register, logout, recoverAccount, isAuthenticated: !!user, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

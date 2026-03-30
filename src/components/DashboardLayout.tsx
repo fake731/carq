@@ -75,14 +75,7 @@ const DashboardLayout = ({ children, title }: Props) => {
     { path: "/الملف-الشخصي", icon: User, label: "الملف" },
   ];
 
-  const isActivePath = (path: string) => {
-    const altPaths: Record<string, string> = {
-      "/لوحة-التحكم": "/dashboard",
-      "/المحادثات": "/chat",
-      "/الملف-الشخصي": "/profile",
-    };
-    return location.pathname === path || location.pathname === altPaths[path];
-  };
+  const isActivePath = (path: string) => location.pathname === path;
 
   return (
     <div className="min-h-screen bg-background bg-animated">
@@ -97,7 +90,6 @@ const DashboardLayout = ({ children, title }: Props) => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
               className="w-9 h-9 rounded-xl bg-surface-2 flex items-center justify-center hover:bg-surface-3 transition-colors text-muted-foreground"

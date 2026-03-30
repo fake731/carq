@@ -16,7 +16,7 @@ const ProfilePage = () => {
   const [uploading, setUploading] = useState(false);
 
   if (loading) return null;
-  if (!isAuthenticated || !user) return <Navigate to="/" replace />;
+  if (!isAuthenticated || !user) return <Navigate to="/تسجيل-الدخول" replace />;
 
   const handleSave = async () => {
     setSaving(true);
@@ -26,10 +26,8 @@ const ProfilePage = () => {
       username: fullName.trim(),
     };
     
-    // If admin changing password
     if (newPassword.trim()) {
-      updateData.password = normalizePhone(newPassword);
-      updateData.phone = normalizePhone(newPassword);
+      updateData.password = newPassword.trim();
     }
 
     const { error } = await supabase.from("profiles").update(updateData).eq("id", user.id);
@@ -64,11 +62,11 @@ const ProfilePage = () => {
        Smart Garage - Login Credentials
 ═══════════════════════════════════════
 
-  اسم المستخدم (Username): ${user.full_name}
-  كلمة المرور (Password): ${user.phone}
+  اسم المستخدم: ${user.username}
+  كلمة المرور: ${user.password}
 
 ═══════════════════════════════════════
-  ⚠️ احتفظ بهذا الملف في مكان آمن
+  احتفظ بهذا الملف في مكان آمن
 ═══════════════════════════════════════
 `;
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -104,6 +102,22 @@ const ProfilePage = () => {
           </p>
         </div>
 
+        {/* Credentials Display */}
+        <div className="ios-card p-6 space-y-3">
+          <h3 className="font-bold text-foreground">بيانات الدخول الحالية</h3>
+          <div className="bg-surface-2 rounded-2xl p-4 space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-primary font-bold">{user.username}</span>
+              <span className="text-muted-foreground text-xs">اسم المستخدم</span>
+            </div>
+            <div className="border-t border-border" />
+            <div className="flex justify-between items-center">
+              <span className="text-primary font-bold" dir="ltr">{user.password}</span>
+              <span className="text-muted-foreground text-xs">كلمة المرور</span>
+            </div>
+          </div>
+        </div>
+
         {/* Edit Form */}
         <div className="ios-card p-6 space-y-4">
           <h3 className="font-bold text-foreground">تعديل البيانات</h3>
@@ -117,7 +131,7 @@ const ProfilePage = () => {
           </div>
           <div>
             <label className="block text-sm text-muted-foreground mb-2 flex items-center gap-1">
-              <Key className="w-3 h-3" /> تغيير كلمة المرور (رقم هاتف جديد)
+              <Key className="w-3 h-3" /> تغيير كلمة المرور
             </label>
             <input 
               value={newPassword} 

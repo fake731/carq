@@ -26,7 +26,7 @@ interface Message {
 }
 
 const ChatPage = () => {
-  const { user, isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading, hasPermission } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -63,7 +63,6 @@ const ChatPage = () => {
     if (!user) return;
     setLoadingChats(true);
 
-    // Get all profiles to create conversations list
     const { data: profiles } = await supabase
       .from("profiles")
       .select("*")
@@ -84,7 +83,6 @@ const ChatPage = () => {
       const lastMsg = msgs[0];
       const unread = msgs.filter(m => m.sender_id === p.id && !m.read).length;
 
-      // Only show if admin/garage can see all, customer sees only those with messages or garage/admin
       if (user.role === "admin" || msgs.length > 0 || p.role === "admin" || (user.role === "customer" && p.role === "garage")) {
         convos.push({
           id: p.id,
@@ -97,7 +95,6 @@ const ChatPage = () => {
       }
     });
 
-    // Sort: unread first, then by last message time
     convos.sort((a, b) => {
       if (a.unread && !b.unread) return -1;
       if (!a.unread && b.unread) return 1;
@@ -121,7 +118,6 @@ const ChatPage = () => {
 
     setMessages(data || []);
 
-    // Mark as read
     await supabase
       .from("messages")
       .update({ read: true })
@@ -134,6 +130,10 @@ const ChatPage = () => {
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedChat || !user) return;
+    if (!hasPermission("send_message")) {
+      toast.error("ليس لديك صلاحية إرسال الرسائل");
+      return;
+    }
     setSending(true);
 
     await supabase.from("messages").insert({
@@ -142,7 +142,6 @@ const ChatPage = () => {
       receiver_id: selectedChat,
     });
 
-    // Send notification
     await supabase.from("notifications").insert({
       recipient_id: selectedChat,
       sender_id: user.id,
@@ -158,6 +157,10 @@ const ChatPage = () => {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedChat || !user) return;
+    if (!hasPermission("upload_photos")) {
+      toast.error("ليس لديك صلاحية رفع الصور");
+      return;
+    }
 
     const path = `chat/${user.id}/${Date.now()}-${file.name}`;
     const { error } = await supabase.storage.from("car-images").upload(path, file);
@@ -166,7 +169,7 @@ const ChatPage = () => {
     const { data: { publicUrl } } = supabase.storage.from("car-images").getPublicUrl(path);
 
     await supabase.from("messages").insert({
-      content: "📷 صورة",
+      content: "صورة",
       sender_id: user.id,
       receiver_id: selectedChat,
       images: [publicUrl],
@@ -176,7 +179,7 @@ const ChatPage = () => {
   };
 
   if (loading) return null;
-  if (!isAuthenticated) return <Navigate to="/" replace />;
+  if (!isAuthenticated) return <Navigate to="/تسجيل-الدخول" replace />;
 
   const selectedContact = conversations.find(c => c.id === selectedChat);
 
@@ -234,7 +237,6 @@ const ChatPage = () => {
           <div className={`${selectedChat ? "flex" : "hidden md:flex"} flex-col flex-1`}>
             {selectedChat ? (
               <>
-                {/* Chat Header */}
                 <div className="p-4 border-b border-border flex items-center gap-3 bg-card/50 backdrop-blur-xl">
                   <button onClick={() => setSelectedChat(null)} className="md:hidden text-muted-foreground">
                     <ArrowLeft className="w-5 h-5" />
@@ -250,7 +252,6 @@ const ChatPage = () => {
                   </div>
                 </div>
 
-                {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                   {messages.map(msg => {
                     const isMine = msg.sender_id === user?.id;
@@ -279,7 +280,6 @@ const ChatPage = () => {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input */}
                 <div className="p-3 border-t border-border bg-card/50 backdrop-blur-xl">
                   <div className="flex items-center gap-2">
                     <label className="w-10 h-10 rounded-full bg-surface-2 flex items-center justify-center cursor-pointer hover:bg-surface-3 transition-colors shrink-0">

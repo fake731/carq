@@ -73,6 +73,7 @@ const DashboardLayout = ({ children, title }: Props) => {
     { path: "/لوحة-التحكم", icon: Home, label: "الرئيسية" },
     { path: "/المحادثات", icon: MessageSquare, label: "الشات" },
     { path: "/الملف-الشخصي", icon: User, label: "الملف" },
+    ...(user?.role === "admin" ? [{ path: "/الثيمات", icon: Palette, label: "الثيمات" }] : []),
   ];
 
   const isActivePath = (path: string) => location.pathname === path;

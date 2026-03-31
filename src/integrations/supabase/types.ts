@@ -165,6 +165,33 @@ export type Database = {
           },
         ]
       }
+      global_theme: {
+        Row: {
+          accent_color: string
+          border_radius: number
+          font_scale: number
+          id: string
+          primary_color: string
+          updated_at: string
+        }
+        Insert: {
+          accent_color?: string
+          border_radius?: number
+          font_scale?: number
+          id?: string
+          primary_color?: string
+          updated_at?: string
+        }
+        Update: {
+          accent_color?: string
+          border_radius?: number
+          font_scale?: number
+          id?: string
+          primary_color?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           car_id: string | null

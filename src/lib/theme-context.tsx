@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 type Theme = "dark" | "light";
 
@@ -9,6 +10,18 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
+
+const applyGlobalTheme = (c: { primary_color: string; accent_color: string; font_scale: number; border_radius: number }) => {
+  const root = document.documentElement;
+  root.style.setProperty("--primary", c.primary_color);
+  root.style.setProperty("--ring", c.primary_color);
+  root.style.setProperty("--accent", c.accent_color);
+  root.style.setProperty("--neon-cyan", c.primary_color);
+  root.style.setProperty("--sidebar-primary", c.primary_color);
+  root.style.setProperty("--sidebar-ring", c.primary_color);
+  root.style.fontSize = `${Number(c.font_scale) * 16}px`;
+  root.style.setProperty("--radius", `${Number(c.border_radius)}rem`);
+};
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
@@ -25,6 +38,30 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
     localStorage.setItem("smart_garage_theme", theme);
   }, [theme]);
+
+  // Load global theme from DB and listen for realtime changes
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const { data } = await supabase
+          .from("global_theme")
+          .select("*")
+          .eq("id", "default")
+          .maybeSingle();
+        if (data) applyGlobalTheme(data as any);
+      } catch {}
+    };
+    load();
+
+    const channel = supabase
+      .channel("theme-realtime")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "global_theme" }, (payload) => {
+        applyGlobalTheme(payload.new as any);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const toggleTheme = () => setThemeState(prev => prev === "dark" ? "light" : "dark");
   const setTheme = (t: Theme) => setThemeState(t);

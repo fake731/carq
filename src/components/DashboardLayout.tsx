@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme-context";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Bell, LogOut, Wrench, User, MessageSquare, Home, X, Check, Sun, Moon } from "lucide-react";
+import { Bell, LogOut, Wrench, User, MessageSquare, Home, X, Check, Sun, Moon, Palette } from "lucide-react";
 
 interface Props {
   children: ReactNode;

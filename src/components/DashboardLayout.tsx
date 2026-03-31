@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme-context";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Bell, LogOut, Wrench, User, MessageSquare, Home, X, Check, Sun, Moon } from "lucide-react";
+import { Bell, LogOut, Wrench, User, MessageSquare, Home, X, Check, Sun, Moon, Palette } from "lucide-react";
 
 interface Props {
   children: ReactNode;
@@ -73,12 +73,13 @@ const DashboardLayout = ({ children, title }: Props) => {
     { path: "/لوحة-التحكم", icon: Home, label: "الرئيسية" },
     { path: "/المحادثات", icon: MessageSquare, label: "الشات" },
     { path: "/الملف-الشخصي", icon: User, label: "الملف" },
+    ...(user?.role === "admin" ? [{ path: "/الثيمات", icon: Palette, label: "الثيمات" }] : []),
   ];
 
   const isActivePath = (path: string) => location.pathname === path;
 
   return (
-    <div className="min-h-screen bg-background bg-animated">
+    <div className="min-h-screen bg-background relative">
       {/* Header */}
       <header className="sticky top-0 z-50 glass-strong border-b border-border/30">
         <div className="container flex items-center justify-between h-14 px-4">

@@ -19,7 +19,7 @@ const VisitorLanding = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background bg-animated">
+    <div className="min-h-screen bg-background relative">
       <div className="relative z-10">
         {/* Header */}
         <header className="sticky top-0 z-50 glass-strong border-b border-border/30">

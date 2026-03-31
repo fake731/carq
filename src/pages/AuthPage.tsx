@@ -120,7 +120,7 @@ const AuthPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-animated bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background relative flex items-center justify-center p-4">
       <div className="relative z-10 w-full max-w-md animate-slide-up">
         {/* Logo */}
         <div className="text-center mb-8">

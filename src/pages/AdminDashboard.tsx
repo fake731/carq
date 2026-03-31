@@ -58,7 +58,6 @@ const AdminDashboard = () => {
     { id: "garages", label: "الكراجات", icon: Building2 },
     { id: "cars", label: "السيارات", icon: Car },
     { id: "notifications", label: "الإشعارات", icon: Bell },
-    { id: "settings", label: "الإعدادات", icon: Settings },
     { id: "logs", label: "السجل", icon: FileText },
   ];
 

@@ -79,7 +79,7 @@ const DashboardLayout = ({ children, title }: Props) => {
   const isActivePath = (path: string) => location.pathname === path;
 
   return (
-    <div className="min-h-screen bg-background bg-animated">
+    <div className="min-h-screen bg-background relative">
       {/* Header */}
       <header className="sticky top-0 z-50 glass-strong border-b border-border/30">
         <div className="container flex items-center justify-between h-14 px-4">

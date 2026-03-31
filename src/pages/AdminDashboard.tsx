@@ -733,54 +733,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* SETTINGS TAB */}
-        {tab === "settings" && (
-          <div className="space-y-6 animate-slide-up">
-            <div className="ios-card p-6">
-              <h3 className="font-bold text-foreground text-lg mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-primary" /> صلاحيات المطور ({ALL_PERMISSIONS.length} صلاحية)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {ALL_PERMISSIONS.map((perm) => {
-                  const Icon = permissionIcons[perm] || Settings;
-                  const isActive = hasPermission(perm);
-                  return (
-                    <div key={perm} className={`flex items-center gap-3 rounded-2xl p-4 ${isActive ? "bg-accent/5 border border-accent/20" : "bg-surface-2"}`}>
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isActive ? "bg-accent/10" : "bg-surface-3"}`}>
-                        <Icon className={`w-5 h-5 ${isActive ? "text-accent" : "text-muted-foreground"}`} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-foreground font-bold text-sm">{PERMISSION_LABELS[perm]}</p>
-                      </div>
-                      {isActive && <Check className="w-4 h-4 text-accent shrink-0" />}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="ios-card p-6">
-              <h3 className="font-bold text-foreground text-lg mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-accent" /> إحصائيات سريعة</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-surface-2 rounded-2xl p-4 text-center">
-                  <p className="text-3xl font-bold text-primary">{users.length}</p>
-                  <p className="text-xs text-muted-foreground">إجمالي المستخدمين</p>
-                </div>
-                <div className="bg-surface-2 rounded-2xl p-4 text-center">
-                  <p className="text-3xl font-bold text-accent">{cars.filter(c => c.status === "ready").length}</p>
-                  <p className="text-xs text-muted-foreground">سيارات جاهزة</p>
-                </div>
-                <div className="bg-surface-2 rounded-2xl p-4 text-center">
-                  <p className="text-3xl font-bold text-neon-orange">{cars.filter(c => c.status === "repairing").length}</p>
-                  <p className="text-xs text-muted-foreground">قيد التصليح</p>
-                </div>
-                <div className="bg-surface-2 rounded-2xl p-4 text-center">
-                  <p className="text-3xl font-bold text-destructive">{pendingUsers.length}</p>
-                  <p className="text-xs text-muted-foreground">بانتظار الموافقة</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* LOGS TAB */}
         {tab === "logs" && (
           <div className="space-y-4 animate-slide-up">

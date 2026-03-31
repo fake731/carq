@@ -4,6 +4,7 @@ import { Navigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Palette, Type, Sun, Moon, Check, RotateCcw } from "lucide-react";
 import { useTheme } from "@/lib/theme-context";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface ThemeConfig {
@@ -60,42 +61,87 @@ const DEFAULT_CONFIG: ThemeConfig = {
   borderRadius: 1,
 };
 
+const applyThemeToDOM = (c: ThemeConfig) => {
+  const root = document.documentElement;
+  root.style.setProperty("--primary", c.primaryColor);
+  root.style.setProperty("--ring", c.primaryColor);
+  root.style.setProperty("--accent", c.accentColor);
+  root.style.setProperty("--neon-cyan", c.primaryColor);
+  root.style.setProperty("--sidebar-primary", c.primaryColor);
+  root.style.setProperty("--sidebar-ring", c.primaryColor);
+  root.style.fontSize = `${c.fontScale * 16}px`;
+  root.style.setProperty("--radius", `${c.borderRadius}rem`);
+};
+
+// Export for use in main.tsx / theme-context
+export { applyThemeToDOM, DEFAULT_CONFIG };
+export type { ThemeConfig };
+
 const ThemesPage = () => {
   const { isAuthenticated, loading, hasPermission } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [config, setConfig] = useState<ThemeConfig>(DEFAULT_CONFIG);
+  const [loaded, setLoaded] = useState(false);
 
-  const [config, setConfig] = useState<ThemeConfig>(() => {
-    try {
-      const saved = localStorage.getItem("smart_garage_theme_config");
-      return saved ? JSON.parse(saved) : DEFAULT_CONFIG;
-    } catch {
-      return DEFAULT_CONFIG;
-    }
-  });
-
+  // Load from DB
   useEffect(() => {
-    applyTheme(config);
-  }, [config]);
+    const load = async () => {
+      const { data } = await supabase
+        .from("global_theme")
+        .select("*")
+        .eq("id", "default")
+        .maybeSingle();
+      if (data) {
+        const c: ThemeConfig = {
+          primaryColor: data.primary_color,
+          accentColor: data.accent_color,
+          fontScale: Number(data.font_scale),
+          borderRadius: Number(data.border_radius),
+        };
+        setConfig(c);
+        applyThemeToDOM(c);
+      }
+      setLoaded(true);
+    };
+    load();
 
-  const applyTheme = (c: ThemeConfig) => {
-    const root = document.documentElement;
-    root.style.setProperty("--primary", c.primaryColor);
-    root.style.setProperty("--ring", c.primaryColor);
-    root.style.setProperty("--accent", c.accentColor);
-    root.style.setProperty("--neon-cyan", c.primaryColor);
-    root.style.setProperty("--sidebar-primary", c.primaryColor);
-    root.style.setProperty("--sidebar-ring", c.primaryColor);
-    root.style.fontSize = `${c.fontScale * 16}px`;
-    root.style.setProperty("--radius", `${c.borderRadius}rem`);
-    localStorage.setItem("smart_garage_theme_config", JSON.stringify(c));
+    // Realtime sync
+    const channel = supabase
+      .channel("global-theme-sync")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "global_theme" }, (payload) => {
+        const d = payload.new as any;
+        const c: ThemeConfig = {
+          primaryColor: d.primary_color,
+          accentColor: d.accent_color,
+          fontScale: Number(d.font_scale),
+          borderRadius: Number(d.border_radius),
+        };
+        setConfig(c);
+        applyThemeToDOM(c);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const saveConfig = async (c: ThemeConfig) => {
+    setConfig(c);
+    applyThemeToDOM(c);
+    await supabase.from("global_theme").update({
+      primary_color: c.primaryColor,
+      accent_color: c.accentColor,
+      font_scale: c.fontScale,
+      border_radius: c.borderRadius,
+      updated_at: new Date().toISOString(),
+    }).eq("id", "default");
   };
 
-  const resetTheme = () => {
-    setConfig(DEFAULT_CONFIG);
+  const resetTheme = async () => {
+    await saveConfig(DEFAULT_CONFIG);
     toast.success("تم إعادة الإعدادات الافتراضية");
   };
 
-  if (loading) return null;
+  if (loading || !loaded) return null;
   if (!isAuthenticated) return <Navigate to="/تسجيل-الدخول" replace />;
   if (!hasPermission("edit_themes")) return <Navigate to="/لوحة-التحكم" replace />;
 
@@ -136,11 +182,12 @@ const ThemesPage = () => {
           <h3 className="font-bold text-foreground text-lg mb-4 flex items-center gap-2">
             <Palette className="w-5 h-5 text-primary" /> اللون الرئيسي
           </h3>
+          <p className="text-xs text-muted-foreground mb-3">التغييرات تنطبق على جميع المستخدمين فوراً</p>
           <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
             {COLOR_PRESETS.map((c) => (
               <button
                 key={c.value}
-                onClick={() => setConfig({ ...config, primaryColor: c.value })}
+                onClick={() => saveConfig({ ...config, primaryColor: c.value })}
                 className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all ${
                   config.primaryColor === c.value ? "border-primary shadow-lg" : "border-border hover:border-primary/30"
                 }`}
@@ -162,7 +209,7 @@ const ThemesPage = () => {
             {ACCENT_PRESETS.map((c) => (
               <button
                 key={c.value}
-                onClick={() => setConfig({ ...config, accentColor: c.value })}
+                onClick={() => saveConfig({ ...config, accentColor: c.value })}
                 className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all ${
                   config.accentColor === c.value ? "border-accent shadow-lg" : "border-border hover:border-accent/30"
                 }`}
@@ -186,7 +233,7 @@ const ThemesPage = () => {
             {FONT_SCALES.map((f) => (
               <button
                 key={f.value}
-                onClick={() => setConfig({ ...config, fontScale: f.value })}
+                onClick={() => saveConfig({ ...config, fontScale: f.value })}
                 className={`flex-1 py-3 rounded-2xl border-2 text-sm font-bold transition-all ${
                   config.fontScale === f.value
                     ? "border-primary bg-primary/5 text-primary"
@@ -209,7 +256,7 @@ const ThemesPage = () => {
             {RADIUS_OPTIONS.map((r) => (
               <button
                 key={r.value}
-                onClick={() => setConfig({ ...config, borderRadius: r.value })}
+                onClick={() => saveConfig({ ...config, borderRadius: r.value })}
                 className={`flex-1 py-3 border-2 text-sm font-bold transition-all ${
                   config.borderRadius === r.value
                     ? "border-primary bg-primary/5 text-primary"

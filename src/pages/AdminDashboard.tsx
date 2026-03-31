@@ -15,7 +15,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/phone-utils";
 
-type Tab = "overview" | "users" | "garages" | "cars" | "notifications" | "approvals" | "settings" | "logs";
+type Tab = "overview" | "users" | "garages" | "cars" | "notifications" | "approvals" | "logs";
 type ProfileRow = Tables<"profiles">;
 type CarRow = Tables<"cars">;
 type NotificationRow = Tables<"notifications">;

@@ -226,20 +226,25 @@ const AdminDashboard = () => {
 
   const updateCarStatus = async (carId: string, newStatus: string) => {
     if (!hasPermission("edit_car")) { toast.error("ليس لديك صلاحية"); return; }
-    await supabase.from("cars").update({ status: newStatus }).eq("id", carId);
     const car = cars.find(c => c.id === carId);
+    const wasPending = car?.status === "pending";
+    await supabase.from("cars").update({ status: newStatus }).eq("id", carId);
     if (car) {
-      await supabase.from("car_updates").insert({ car_id: carId, status: newStatus, message: `تحديث الحالة: ${statusLabels[newStatus as CarStatus] || newStatus}` });
+      const statusMessage = wasPending && newStatus === "received" 
+        ? "تم قبول طلب سيارتك" 
+        : `تحديث الحالة: ${statusLabels[newStatus as CarStatus] || newStatus}`;
+      await supabase.from("car_updates").insert({ car_id: carId, status: newStatus, message: statusMessage });
       const { data: ownerProfile } = await supabase.from("profiles").select("id").eq("phone", car.owner_phone).maybeSingle();
       if (ownerProfile) {
         await supabase.from("notifications").insert({
           recipient_id: ownerProfile.id, sender_id: user?.id,
-          title: "تحديث حالة السيارة", message: `${car.make} ${car.model}: ${statusLabels[newStatus as CarStatus] || newStatus}`,
+          title: wasPending ? "تم قبول طلبك" : "تحديث حالة السيارة",
+          message: `${car.make} ${car.model}: ${statusMessage}`,
           type: "status",
         });
       }
     }
-    toast.success("تم تحديث الحالة");
+    toast.success(wasPending ? "تم قبول الطلب" : "تم تحديث الحالة");
     setCustomStatusCar(null);
     setCustomStatusText("");
     loadAll();

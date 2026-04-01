@@ -1,0 +1,2 @@
+ALTER TABLE public.cars DROP CONSTRAINT cars_status_check;
+ALTER TABLE public.cars ADD CONSTRAINT cars_status_check CHECK (status IN ('pending', 'received', 'inspecting', 'repairing', 'waiting_parts', 'ready', 'week_wait', 'two_weeks', 'needs_time', 'not_started', 'testing', 'delivered'));

@@ -64,6 +64,7 @@ const GarageDashboard = () => {
 
     if (data && !error) {
       await supabase.from("car_updates").insert({ car_id: data.id, status: "received", message: "تم استلام السيارة" });
+      // إشعار صاحب السيارة
       const { data: ownerProfile } = await supabase.from("profiles").select("id").eq("phone", newCar.ownerPhone).maybeSingle();
       if (ownerProfile) {
         await supabase.from("notifications").insert({
@@ -71,6 +72,19 @@ const GarageDashboard = () => {
           title: "سيارة جديدة", message: `تم استلام سيارتك ${newCar.make} ${newCar.model}`,
           type: "status",
         });
+      }
+      // إشعار المطور (admin)
+      const { data: admins } = await supabase.from("profiles").select("id").eq("role", "admin");
+      if (admins) {
+        for (const admin of admins) {
+          if (admin.id !== user?.id) {
+            await supabase.from("notifications").insert({
+              recipient_id: admin.id, sender_id: user?.id,
+              title: "سيارة جديدة من الكراج", message: `تم إضافة سيارة ${newCar.make} ${newCar.model} - صاحبها: ${newCar.ownerName}`,
+              type: "system",
+            });
+          }
+        }
       }
       toast.success("تم إضافة السيارة");
       setShowAddCar(false);

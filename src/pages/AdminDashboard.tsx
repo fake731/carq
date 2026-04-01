@@ -661,8 +661,43 @@ const AdminDashboard = () => {
                 <Download className="w-4 h-4" /> تصدير
               </button>
             </div>
-            <p className="text-muted-foreground text-sm">{cars.length} سيارة في النظام</p>
-            {cars.map(car => (
+
+            {/* Pending Cars Section */}
+            {pendingCars.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-bold text-neon-orange text-sm flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" /> طلبات سيارات بانتظار الموافقة ({pendingCars.length})
+                </h3>
+                {pendingCars.map(car => (
+                  <div key={car.id} className="ios-card p-4 border-2 border-neon-orange/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-neon-orange/10 flex items-center justify-center">
+                          <Car className="w-5 h-5 text-neon-orange" />
+                        </div>
+                        <div>
+                          <p className="text-foreground font-bold">{car.make} {car.model} {car.year}</p>
+                          <p className="text-xs text-muted-foreground">{car.owner_name} - {car.owner_phone}</p>
+                          <p className="text-xs text-muted-foreground">{car.plate_number} {car.color ? `• ${car.color}` : ""}</p>
+                          {car.notes && <p className="text-xs text-muted-foreground mt-1">📝 {car.notes}</p>}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => updateCarStatus(car.id, "received")} className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center hover:bg-accent/20 transition-colors" title="قبول">
+                          <Check className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => deleteCar(car.id)} className="w-10 h-10 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive/20 transition-colors" title="رفض">
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="text-muted-foreground text-sm">{cars.filter(c => c.status !== "pending").length} سيارة مقبولة في النظام</p>
+            {cars.filter(c => c.status !== "pending").map(car => (
               <div key={car.id} className="ios-card p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -681,7 +716,7 @@ const AdminDashboard = () => {
                       onChange={e => updateCarStatus(car.id, e.target.value)}
                       className="text-xs bg-surface-2 border border-border rounded-xl px-2 py-1.5 text-foreground focus:outline-none focus:border-primary"
                     >
-                      {allStatuses.map(s => (
+                      {allStatuses.filter(s => s.value !== "pending").map(s => (
                         <option key={s.value} value={s.value}>{s.label}</option>
                       ))}
                     </select>

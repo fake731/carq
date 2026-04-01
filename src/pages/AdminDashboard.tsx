@@ -162,10 +162,11 @@ const AdminDashboard = () => {
     if (!hasPermission("manage_garages")) { toast.error("ليس لديك صلاحية"); return; }
     if (!newGarage.name) { toast.error("الرجاء إدخال اسم الكراج"); return; }
     const garageId = newGarage.name.replace(/\s/g, "_").toLowerCase();
-    await supabase.from("garages").insert({
+    const { error } = await supabase.from("garages").insert({
       id: garageId, name: newGarage.name, phone: newGarage.phone,
       address: newGarage.address, is_premium: newGarage.isPremium,
     });
+    if (error) { toast.error("خطأ: " + error.message); return; }
 
     if (newGarage.ownerName && newGarage.ownerPhone) {
       const normalizedPhone = normalizePhone(newGarage.ownerPhone);
@@ -175,6 +176,12 @@ const AdminDashboard = () => {
         role: "garage", garage_id: garageId, garage_name: newGarage.name, approved: true,
       });
     }
+    // إشعار المطور
+    await supabase.from("notifications").insert({
+      recipient_id: user?.id, sender_id: user?.id,
+      title: "كراج جديد", message: `تم إنشاء كراج: ${newGarage.name}`,
+      type: "system",
+    });
     toast.success("تم إنشاء الكراج");
     setShowAddGarage(false);
     setNewGarage({ name: "", phone: "", address: "", isPremium: false, ownerName: "", ownerPhone: "" });
@@ -191,15 +198,26 @@ const AdminDashboard = () => {
   const addCarByAdmin = async () => {
     if (!hasPermission("add_car")) { toast.error("ليس لديك صلاحية"); return; }
     if (!newCar.make || !newCar.ownerName || !newCar.ownerPhone) { toast.error("الرجاء تعبئة الحقول المطلوبة"); return; }
-    const { error } = await supabase.from("cars").insert({
+    const { data, error } = await supabase.from("cars").insert({
       make: newCar.make, model: newCar.model, year: newCar.year,
       plate_number: newCar.plateNumber, color: newCar.color,
       owner_name: newCar.ownerName, owner_phone: newCar.ownerPhone,
       notes: newCar.notes, estimated_cost: newCar.estimatedCost,
       estimated_time: newCar.estimatedTime, garage_id: newCar.garageId || null,
       status: "received",
-    });
-    if (error) { toast.error("خطأ"); return; }
+    }).select().single();
+    if (error) { toast.error("خطأ: " + error.message); return; }
+    // إشعار صاحب السيارة
+    if (data) {
+      const { data: ownerProfile } = await supabase.from("profiles").select("id").eq("phone", newCar.ownerPhone).maybeSingle();
+      if (ownerProfile) {
+        await supabase.from("notifications").insert({
+          recipient_id: ownerProfile.id, sender_id: user?.id,
+          title: "سيارة جديدة", message: `تم إضافة سيارتك ${newCar.make} ${newCar.model} في النظام`,
+          type: "status",
+        });
+      }
+    }
     toast.success("تم إضافة السيارة");
     setShowAddCar(false);
     setNewCar({ make: "", model: "", year: 2024, plateNumber: "", color: "", ownerName: "", ownerPhone: "", notes: "", estimatedCost: 0, estimatedTime: "", garageId: "" });

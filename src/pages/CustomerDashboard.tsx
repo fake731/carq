@@ -70,6 +70,17 @@ const CustomerDashboard = () => {
       notes: newRequest.notes, status: "pending",
       owner_id: user.id,
     });
+    // إرسال إشعار للمطور (admin)
+    const { data: admins } = await supabase.from("profiles").select("id").eq("role", "admin");
+    if (admins) {
+      for (const admin of admins) {
+        await supabase.from("notifications").insert({
+          recipient_id: admin.id, sender_id: user.id,
+          title: "طلب سيارة جديد", message: `${user.full_name} أرسل طلب سيارة: ${newRequest.make} ${newRequest.model}`,
+          type: "system",
+        });
+      }
+    }
     toast.success("تم إرسال الطلب وسيتم مراجعته من الإدارة");
     setShowRequestForm(false);
     setNewRequest({ make: "", model: "", year: 2024, plateNumber: "", color: "", notes: "" });
